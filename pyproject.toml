@@ -1,0 +1,36 @@
+[tool.poetry]
+name = "store"
+version = "0.1.0"
+description = ""
+authors = ["dameng <pingf0@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+flask = "^1.1"
+pony = "^0.7.10"
+psycopg2 = "^2.8"
+pymysql = "^0.9.3"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.0"
+pytest-mock = "^1.10"
+pytest-bdd = "^3.1"
+autopep8 = "^1.4"
+pylint = "^2.3"
+rope = "^0.14.0"
+wheel = "^0.33.4"
+names = "^0.3.0"
+mkdocs = "^1.0"
+mkdocs-rtd-dropdown = "^1.0"
+
+[[tool.poetry.source]]
+# name = "douban"
+# url = "https://pypi.doubanio.com/simple/"
+name = "aliyun"
+url = "https://mirrors.aliyun.com/pypi/simple/"
+
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
+
