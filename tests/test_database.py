@@ -78,14 +78,14 @@ def test_query_keys(t):
             }
         }
     }
-    elems = t.query_keys('a', 'b', 'c')
+    elems = t.query_value('a', 'b', 'c')
     for elem in elems:
         assert elem['a']['b']['c'] == 123
 
     del t.a
     del t.b
     
-def xtest_insert_many(t):
+def test_insert_many(t):
     a = time.time()
     for i in range(10000):
         t[str(i)] = {
