@@ -258,6 +258,7 @@ class Store(object):
                     self.store(key=key, value=value)
                 return
 
+            
 
             elem = select(e for e in self.store if e.key == key).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
             if elem:
@@ -288,6 +289,13 @@ class Store(object):
                 elems = select(e for e in self.store).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
                 elems = self.adjust_slice(elems)
                 return StoreMetas(elems, store=self.store)
+
+            if '||' in key:
+                keys_sp = [key for key in key.split('||') if len(key)>0]
+                if len(keys_sp) >1:
+                    elems = select(e for e in self.store if e.key in keys_sp).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))[:]
+                    elems = self.adjust_slice(elems)
+                    return StoreMetas(elems, store=self.store)
 
             elem = select(e for e in self.store if e.key == key).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
             if elem:
@@ -332,6 +340,16 @@ class Store(object):
                         elem.delete()
                 return
 
+
+            if '||' in key:
+                keys_sp = [key for key in key.split('||') if len(key)>0]
+                if len(keys_sp) >1:
+                    elems = select(e for e in self.store if e.key in keys_sp).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))[:]
+                    elems = self.adjust_slice(elems)
+                    if elems:
+                        for elem in elems:
+                            elem.delete()
+                    return
 
             elem = select(e for e in self.store if e.key == key).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
             if elem:
@@ -842,6 +860,11 @@ if __name__ == "__main__":
     t.b8 = {"t":{'m': { 'n': {'a1': 'h1', 'z1': 5}}}}
     t.b8 = {"t":{'m': { 'n': {'a1': 'h1', 'z2': 5}}}}
     print(t['t', 'm','n','a1=h1&&z2'])
+    t.c1 = "hello"
+    t.c2 = "hello2"
+    t.c3 = "hello3"
+    print('>>>>>>')
+    print(t['c1||c2||c3'])
 
 
 
