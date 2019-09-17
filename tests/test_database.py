@@ -9,7 +9,7 @@ from store.database import Store
 def t():
     class Cat(Store):
         pass
-    return Cat(provider='mysql', port=8306, password='dangerous123', database='mytest')
+    return Cat(provider='mysql', port=8306, password='dangerous123', database='mytest', user='root')
     # return Cat(provider='postgres', user='dameng', password='pythonic', database='mytest')
 
 
@@ -85,7 +85,7 @@ def test_query_keys(t):
     del t.a
     del t.b
     
-def test_insert_many(t):
+def xtest_insert_many(t):
     a = time.time()
     for i in range(10000):
         t[str(i)] = {
@@ -101,7 +101,7 @@ def test_insert_many(t):
     print('inserted', b-a)
 
 
-def test_query_many(t):
+def xtest_query_many(t):
     a = time.time()
     e = t['fname=Mark']
     print(len(e))
