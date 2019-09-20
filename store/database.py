@@ -139,7 +139,7 @@ class Store(object):
     _safe_attrs = ['store', 'database', 'tablename', 
                    'begin', 'end', 'order', 
                    'add', 'register_attr', 'slice', 'adjust_slice', 'provider',
-                   'query_key', 
+                   'query_key', 'count', 'desc', 'asc',
                    'provider', 'user', 'password', 'host', 'port', 'database', 'filename'
                    ]
 
@@ -150,11 +150,12 @@ class Store(object):
     port = 5432
     database = 'test'
     filename = 'database.sqlite'
+    order = 'desc'
 
     def __init__(self,
                  provider=None, user=None, password=None,
                  host=None, port=None, database=None, filename=None,
-                 begin=None, end=None, order='desc'):
+                 begin=None, end=None, order=None):
         if not provider:
             provider = self.provider
 
@@ -179,7 +180,7 @@ class Store(object):
         self.provider = provider
 
         self.begin, self.end = begin, end
-        self.order = order
+        self.order = order or self.order
         self.tablename = self.__class__.__name__
 
         schema = dict(
@@ -195,6 +196,12 @@ class Store(object):
 
     def slice(self, begin, end):
         self.begin, self.end = begin, end
+
+    def desc(self):
+        self.order = 'desc'
+
+    def asc(self):
+        self.order = 'asc'
 
     @staticmethod
     def register_attr(name):
@@ -223,33 +230,18 @@ class Store(object):
         return None
 
     @db_session
-    def __setitem__(self, key, value):
-
+    def count(self, key):
         if isinstance(key, slice):
             raise Exception('not implemented!')
         elif isinstance(key, tuple):
             key='.'.join(key)
-        
+
+        # string key
         filters = parse(key)
-        # print(filters)
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
-        if self.order_by == 'desc':
-            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
-        elems = self.adjust_slice(elems, for_update=False)
-        if elems:
-            now = datetime.utcnow()
-            for elem in elems:
-                elem.value = value
-                elem.update = now
-        else:
-            if key.isidentifier():
-                return self.__setattr__(key, value)
-            raise Exception('Not Implemented!')
-        return
-
-        
+        return elems.count()
 
     @db_session
     def __getitem__(self, key):
@@ -265,10 +257,40 @@ class Store(object):
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
-        if self.order_by == 'desc':
+        if self.order == 'desc':
             elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         elems = self.adjust_slice(elems, for_update=False)
         return StoreMetas(elems, store=self.store)
+
+
+    @db_session
+    def __setitem__(self, key, value):
+
+        if isinstance(key, slice):
+            raise Exception('not implemented!')
+        elif isinstance(key, tuple):
+            key='.'.join(key)
+        
+        filters = parse(key)
+        # print(filters)
+        elems = select(e for e in self.store)
+        if filters:
+            elems = elems.filter(filters)
+        if self.order_by == 'desc':
+            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
+        elems = self.adjust_slice(elems, for_update=True)
+        if elems:
+            now = datetime.utcnow()
+            for elem in elems:
+                elem.value = value
+                elem.update = now
+        else:
+            if key.isidentifier():
+                return self.__setattr__(key, value)
+            raise Exception('Not Implemented!')
+        return
+
+        
 
             
 
@@ -346,20 +368,3 @@ class Store(object):
     @db_session
     def __len__(self):
         return count(e for e in self.store)
-
-
-class Tiger(Store):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        Store.register_attr('test')
-
-    def test(self):
-        print('test')
-
-
-def test(t):
-    t.a = {
-        'name': 'king'
-    }
-    print(t['name=king'].name)
-
