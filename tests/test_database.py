@@ -78,30 +78,30 @@ def test_query_keys(t):
             }
         }
     }
-    elems = t.query_value('a', 'b', 'c')
-    for elem in elems:
+    # print(t['a.b.c'])
+    for elem in t['a.b.c?']:
         assert elem['a']['b']['c'] == 123
 
     del t.a
     del t.b
     
-def xtest_insert_many(t):
+def test_insert_many(t):
     a = time.time()
-    for i in range(10000):
-        t[str(i)] = {
+    for i in range(1000):
+        t[f's_{i}'] = {
             "type": "image",
             "resource": str(uuid.uuid1()),
             "fname": names.get_first_name(),
             "lname": names.get_last_name()
         }
-        if i % 1000 == 0:
+        if i % 100 == 0:
             print('{} inserted'.format(i))
             b = time.time()
             print('insert>', b-a)
     print('inserted', b-a)
 
 
-def xtest_query_many(t):
+def test_query_many(t):
     a = time.time()
     e = t['fname=Mark']
     print(len(e))

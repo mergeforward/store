@@ -71,7 +71,7 @@ class StoreMeta:
 
     @db_session
     def __assign__(self, value):
-        elem = select(e for e in self.store if e.id == self.id).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).for_update().first()
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
@@ -85,7 +85,7 @@ class StoreMeta:
     def __setattr__(self, key, value):
         if key in ['store', 'id', 'key', 'value', 'create', 'update'] or key.startswith('_'):
             return super().__setattr__(key, value)
-        elem = select(e for e in self.store if e.id == self.id).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).for_update().first()
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
@@ -103,14 +103,14 @@ class StoreMeta:
         if key in ['store', 'id', 'key', 'value', 'create', 'update'] or key.startswith('_'):
             return object.__getattribute__(self, key)
 
-        elem = select(e for e in self.store if e.id == self.id).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
+        elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
             if isinstance(elem.value, dict):
                 return elem.value.get(key)
 
     @db_session
     def __setitem__(self, key, value):
-        elem = select(e for e in self.store if e.id == self.id).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).for_update().first()
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
@@ -126,7 +126,7 @@ class StoreMeta:
 
     @db_session
     def __getitem__(self, key):
-        elem = select(e for e in self.store if e.id == self.id).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
+        elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
             if isinstance(elem.value, dict) or \
                (isinstance(key, int) and isinstance(elem.value, list)) or \
@@ -137,9 +137,9 @@ class StoreMeta:
                     return elem.value.get(key)
 class Store(object):
     _safe_attrs = ['store', 'database', 'tablename', 
-                   'begin', 'end',  
+                   'begin', 'end', 'order', 
                    'add', 'register_attr', 'slice', 'adjust_slice', 'provider',
-                   'query_key', 'query_value', 
+                   'query_key', 
                    'provider', 'user', 'password', 'host', 'port', 'database', 'filename'
                    ]
 
@@ -154,7 +154,7 @@ class Store(object):
     def __init__(self,
                  provider=None, user=None, password=None,
                  host=None, port=None, database=None, filename=None,
-                 begin=None, end=None):
+                 begin=None, end=None, order='desc'):
         if not provider:
             provider = self.provider
 
@@ -179,6 +179,7 @@ class Store(object):
         self.provider = provider
 
         self.begin, self.end = begin, end
+        self.order = order
         self.tablename = self.__class__.__name__
 
         schema = dict(
@@ -204,7 +205,7 @@ class Store(object):
     def __setattr__(self, key, value):
         if key in Store._safe_attrs or key.startswith('_'):
             return super().__setattr__(key, value)
-        item = select(e for e in self.store if e.key == key).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
+        item = select(e for e in self.store if e.key == key).first()
         if item is None:
             self.store(key=key, value=value)
         else:
@@ -216,7 +217,7 @@ class Store(object):
         if key in Store._safe_attrs or key.startswith('_'):
             return object.__getattribute__(self, key)
 
-        elem = select(e for e in self.store if e.key == key).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
+        elem = select(e for e in self.store if e.key == key).first()
         if elem:
             return StoreMeta(elem, store=self.store)
         return None
@@ -227,24 +228,15 @@ class Store(object):
         if isinstance(key, slice):
             raise Exception('not implemented!')
         elif isinstance(key, tuple):
-            raise Exception('not implemented')
-            # if len(key) > 4:
-            #     raise Exception('not implemented!')
-            # elems = self._query_value(*key)
-            # if elems:
-            #     now = datetime.utcnow()
-            #     for elem in elems:
-            #         elem.value = value
-            #         elem.update = now
-            # else:
-            #     raise Exception('not implemented')
-            # return
+            key='.'.join(key)
         
         filters = parse(key)
         # print(filters)
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
+        if self.order_by == 'desc':
+            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         elems = self.adjust_slice(elems, for_update=False)
         if elems:
             now = datetime.utcnow()
@@ -252,7 +244,9 @@ class Store(object):
                 elem.value = value
                 elem.update = now
         else:
-            raise Exception('not implemented')
+            if key.isidentifier():
+                return self.__setattr__(key, value)
+            raise Exception('Not Implemented!')
         return
 
         
@@ -262,10 +256,7 @@ class Store(object):
         if isinstance(key, slice):
             raise Exception('not implemented!')
         elif isinstance(key, tuple):
-            raise Exception('not implemented!')
-            # if len(key) > 4:
-            #     raise Exception('not implemented!')
-            # return self.query_value(*key)
+            key='.'.join(key)
 
         # string key
         filters = parse(key)
@@ -274,6 +265,8 @@ class Store(object):
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
+        if self.order_by == 'desc':
+            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         elems = self.adjust_slice(elems, for_update=False)
         return StoreMetas(elems, store=self.store)
 
@@ -284,20 +277,15 @@ class Store(object):
         if isinstance(key, slice):
             raise Exception('not implemented!')
         elif isinstance(key, tuple):
-            raise Exception('not implemented!')
-            # if len(key) > 4:
-            #     raise Exception('not implemented!')
-            # elems = self._query_value(*key)
-            # if elems:
-            #     for elem in elems:
-            #         elem.delete()
-            # return
+            key = '.'.join(key)
         filters = parse(key)
         # print('......')
         # print(filters)
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
+        if self.order_by == 'desc':
+            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         if elems:
             for elem in elems:
                 elem.delete()
@@ -319,8 +307,8 @@ class Store(object):
     @db_session
     def _query_key(self, key, for_update=False):
         if for_update:
-            return select(e for e in self.store if e.id == self.id).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).for_update().first()
-        return select(e for e in self.store if e.id == self.id).order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id)).first()
+            return select(e for e in self.store if e.id == self.id).for_update().first()
+        return select(e for e in self.store if e.id == self.id).first()
 
     @db_session
     def query_key(self, key, for_update=False):
@@ -375,84 +363,3 @@ def test(t):
     }
     print(t['name=king'].name)
 
-
-if __name__ == "__main__":
-    import time
-    # t = Tiger(provider='postgres', user='dameng', password='pythonic',
-    #           database='mytest', port=5432, host='127.0.0.1')
-    # t = Tiger(provider='mysql', user='root', password='dangerous123',
-    #           database='mytest', port=8306, host='127.0.0.1')
-    t = Tiger('sqlite')
-    # t.slice(0,10)
-    # print(t['*'])
-    # print('.....')
-
-    # t.slice(10,15)
-    # print(t['*']['like'])
-    # t.test()
-    # t.add({'hello': 1})
-    # t.add({'hello': 2})
-    # print(t['*'])
-    # print(t.sum(lambda e: e.value['hello'] == 'world', 'hello') )
-    # print(sum[t['hello=1']['hello']])
-    # print(len(t))
-    # print(sum(t['hello=1']['hello']))
-
-    # import time
-    # # time.sleep(60)
-    # t.a = {"a1": {"b1": {"c1": {"d1": 14, "d2": ["123", "ab"]}, "c2":30}}, "a2": {"b2": [], "b22": {"c22": 123}}, "a3": []}
-    # # print(t.query_keys("a3"))
-    # # print(t.query_keys("a1", "b1"))
-    # # print(t.query_keys("a2", "b2"))
-    # # print(t['*', "a3"])
-    # print(t.query_value("a1", "b1", "c1", "d1=14"))
-    # print(t["a1", "b1", "c1", "d1=14"])
-    # print(t["a1,b1,c1,d1=14"])
-    # print(t["a1,b1,c1,d1=14"]['a1'])
-    # # time.sleep(1)
-    # for e in t["a1,b1,c1,d1=14"]:
-    #     print(e['a1']['b1']['c1'])
-    #     e['m1'] = 10
-    # # time.sleep(1)
-    # for e in t["a1,b1,c1,d1=14"]:
-    #     print(e)
-    # t["a1,b1,c1,d1=14"]['m1'] = 20
-    # # time.sleep(1)
-    # for e in t["a1,b1,c1,d1=14"]:
-    #     print(e)
-    # print(t["a1,b1,c1,d1=14"]['a1']['b1'])
-    # t["a1,b1,c1,d1=14"]['a1'] = 15
-    # print(t.a)
-    # print(t.query_value("a1", "b1", "c2=10"))
-    t.a = {"a1": {"b1": {"c1": {"d1": 14, "d2": ["123", "ab"]}, "c2":30}}, "a2": {"b2": [], "b22": {"c22": 123}}, "m2": [{"n1": "hello"}, {"n2": "world"}]}
-    # print(type(t['m2','n2']))
-    # print(type(t['a1','b1']))
-    t.b1 = {'a1': 'h1', 'z1':1}
-    t.b2 = {'a1': 'h1', 'z1':2}
-    t.b3 = {'a1': 'h1', 'z1':40}
-    t.b4 = {"t":{'a1': 'h1', 'z1': 100}}
-    t.b5 = {"t":{'a1': 'h1', 'z1': 120}}
-    t.b6 = {"t":{'m': {'a1': 'h2', 'z1': 120}}}
-    t.b7 = {"t":{'m': {'a1': 'h1', 'z1': 5}}}
-    t.b8 = {"t":{'m': { 'n': {'a1': 'h1', 'z1': 5}}}}
-    t.b8 = {"t":{'m': { 'n': {'a1': 'h1', 'z2': 5}}}}
-    # print(t['t', 'm','n','a1=h1&&z2'])
-    # t.c1 = "hello"
-    # t.c2 = "hello2"
-    # t.c3 = "hello3"
-    # t.hello1 = 'abc'
-    # t.hello2 = 'abc'
-    # t.hello3 = 'abc'
-    # t.hello11 = 'abc'
-    # print('>>>>>>')
-    # # print(t['c1||c2||c3'])
-    print(t['a1.b1.c1?'])
-    # print('????')
-    # del t['^hello1']
-    # print(t['^he'])
-    # t.abc = {"hello": "world", "meng": "chao"}
-    # t.abc = {"hello": "world", "men": "chao2"}
-    # print('>>>????1')
-    # print(t['*'].value)
-    # print('>>>????2')
-    # print(t['t,'])

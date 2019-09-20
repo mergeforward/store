@@ -71,6 +71,7 @@ def parse_filter(data):
                 raise Exception('Not Implemented!')
             return filter_map.get(op)
     
+    raise Exception('Not Implemented!')
 
 
 def parse(condition):
