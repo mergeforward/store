@@ -8,7 +8,6 @@ from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
                       db_session, delete, desc, select)
 from store.parser import parse
 
-
 class StoreMetas:
     def __init__(self, elems, store=None):
         if not elems:
@@ -36,6 +35,7 @@ class StoreMetas:
             return
         for elem in self.elems:
             elem[key] = value
+
 
     @db_session
     def __getattribute__(self, key):
@@ -252,8 +252,7 @@ class Store(object):
 
         # string key
         filters = parse(key)
-        # print('......')
-        # print(filters)
+        # print('filter:', filters)
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
@@ -272,7 +271,6 @@ class Store(object):
             key='.'.join(key)
         
         filters = parse(key)
-        # print(filters)
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
@@ -301,8 +299,6 @@ class Store(object):
         elif isinstance(key, tuple):
             key = '.'.join(key)
         filters = parse(key)
-        # print('......')
-        # print(filters)
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
@@ -337,7 +333,6 @@ class Store(object):
         elem = self._query_key(key, for_update=for_update)
         if elem:
             return StoreMeta(elem, store=self.store)
-
 
 
     def adjust_slice(self, elems, for_update=False):

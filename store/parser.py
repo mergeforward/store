@@ -1,4 +1,3 @@
-
 from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
                       db_session, delete, desc, select, raw_sql)
 
@@ -11,151 +10,84 @@ def fi(data):
     else: 
         return f'"{data}"'
 
-def parse_filter(data):
-    for op in ['>=', '<=', '!=', '=', '>', '<', '!:', ':', '?']:
-        if op in data[-1]:
-            k, v = data[-1].split(op, 1)
-            if len(data) == 1:
-                if op == '?':
-                    return f'e.value[{fi(k)}] != None'
-                filter_map = {
-                    '>=':  f'e.value[{fi(k)}] >= {v}',
-                    '<=':  f'e.value[{fi(k)}] <= {v}',
-                    '!=': f'e.value[{fi(k)}] != {fi(v)}',
-                    '=': f'e.value[{fi(k)}] == {fi(v)}',
-                    '>': f'e.value[{fi(k)}] > {v}',
-                    '<': f'e.value[{fi(k)}] < {v}',
-                    '!:': f'{fi(v)} not in e.value[{fi(k)}]',
-                    ':': f'{fi(v)} in e.value[{fi(k)}]',
-                }
-            elif len(data) == 2:
-                if op == '?':
-                    return f'e.value[{fi(data[-2])}][{fi(k)}] != None'
-                filter_map = {
-                    '>=':  f'e.value[{fi(data[-2])}][{fi(k)}] >= {v}',
-                    '<=':  f'e.value[{fi(data[-2])}][{fi(k)}] <= {v}',
-                    '!=': f'e.value[{fi(data[-2])}][{fi(k)}] != {fi(v)}',
-                    '=': f'e.value[{fi(data[-2])}][{fi(k)}] == {fi(v)}',
-                    '>': f'e.value[{fi(data[-2])}][{fi(k)}] > {v}',
-                    '<': f'e.value[{fi(data[-2])}][{fi(k)}] < {v}',
-                    '!:': f'{fi(v)} not in e.value[{fi(data[-2])}][{fi(k)}]',
-                    ':': f'{fi(v)} in e.value[{fi(data[-2])}][{fi(k)}]',
-                }
-            elif len(data) == 3:
-                if op == '?':
-                    return f'e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] != None'
-                filter_map = {
-                    '>=':  f'e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] >= {v}',
-                    '<=':  f'e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] <= {v}',
-                    '!=': f'e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] != {fi(v)}',
-                    '=': f'e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] == {fi(v)}',
-                    '>': f'e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] > {v}',
-                    '<': f'e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] < {v}',
-                    '!:': f'{fi(v)} not in e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}]',
-                    ':': f'{fi(v)} in e.value[{fi(data[-3])}][{fi(data[-2])}][{fi(k)}]',
-                }
-            elif len(data) == 4:
-                if op == '?':
-                    return f'e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] != None'
-                filter_map = {
-                    '>=':  f'e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] >= {v}',
-                    '<=':  f'e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] <= {v}',
-                    '!=': f'e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] != {fi(v)}',
-                    '=': f'e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] == {fi(v)}',
-                    '>': f'e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] > {v}',
-                    '<': f'e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}] < {v}',
-                    '!:': f'{fi(v)} not in e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}]',
-                    ':': f'{fi(v)} in e.value[{fi(data[-4])}][{fi(data[-3])}][{fi(data[-2])}][{fi(k)}]',
-                }
-            else:
-                raise Exception('Not Implemented!')
-            return filter_map.get(op)
-    
-    raise Exception('Not Implemented!')
+# filter value
+def fv(key):
+    filter = ''
+    for i in range(len(key)):
+        filter = f'[{fi(key[-1-i])}]' + filter
+    return filter
 
+def parse_filter(data):
+    # parse json condition
+    for op in ['>=', '<=', '>', '<', '!=', '==', '=',  '!:', ':', '?']:
+        if op in data:
+            # last for json key exists
+            if op == '?':
+                data = data[:-1]
+                break
+            k, v = data.split(op, 1)
+            k = [d.strip() for d in k.split('.')] if '.' in k else [k]
+            if op == '=':
+                op += '='
+            return  f'e.value{fv(k)} {op} {fi(v)}'
+
+    # parse json key exists
+    if '.' in data:
+        key = data.split('.')
+        key = [d.strip() for d in key]
+    else:
+        key = [data]
+    return f'e.value{fv(key)} != None'
+
+def ab_parse(conda, condb, op):
+        # if '||' in conda or '&&' in conda:
+        filtera, filterb = parse(conda), parse(condb)
+
+        if filtera and filterb:
+            return f'{filtera} {op} {filterb}'
+        if filtera:
+            filterb =  parse(condb)          
+            return f'{filtera} {op} {filterb}'
+        if filterb:
+            filtera =  parse(conda)          
+            return f'{filtera} {op} {filterb}'
+        filtera =  parse(conda)          
+        filterb =  parse(condb)          
+        return f'{filtera} {op} {filterb}'
 
 def parse(condition):
     if '||' in condition:
         conda, condb = condition.split('||', 1)
-        conda, condb = conda.strip(), condb.strip()
-        # filtera = filterb = None
-
-        # if '||' in conda or '&&' in conda:
-        filtera = parse(conda)
-
-        # if '||' in condb or '&&' in condb:
-        filterb = parse(condb)
-
-        if filtera and filterb:
-            return f'{filtera} or {filterb}'
-        if filtera:
-            data = condb.split('.') if '.' in condb else [condb]
-            filterb =  parse_filter([d.strip() for d in data])          
-            return f'{filtera} or {filterb}'
-        if filterb:
-            data = conda.split('.') if '.' in conda else [conda]
-            filtera =  parse_filter([d.strip() for d in data])          
-            return f'{filtera} or {filterb}'
-        else:
-            data = conda.split('.') if '.' in conda else [conda]
-            filtera =  parse_filter([d.strip() for d in data])          
-            data = condb.split('.') if '.' in condb else [condb]
-            filterb =  parse_filter([d.strip() for d in data])          
-            return f'{filtera} or {filterb}'
+        # conda, condb = conda.strip(), condb.strip()
+        return ab_parse(conda.strip(), condb.strip(), 'or')
 
     if '&&' in condition:
         conda, condb = condition.split('&&', 1)
-        conda, condb = conda.strip(), condb.strip()
-        filtera = filterb = None
-
-        if '||' in conda or '&&' in conda:
-            filtera = parse(conda)
-
-        if '||' in condb or '&&' in condb:
-            filterb = parse(condb)
-
-        if filtera and filterb:
-            return f'{filtera} and {filterb}'
-        if filtera:
-            data = condb.split('.') if '.' in condb else [condb]
-            filterb =  parse_filter([d.strip() for d in data])          
-            return f'{filtera} and {filterb}'
-        if filterb:
-            data = conda.split('.') if '.' in conda else [conda]
-            filtera =  parse_filter([d.strip() for d in data])          
-            return f'{filtera} and {filterb}'
-        else:
-            data = conda.split('.') if '.' in conda else [conda]
-            filtera =  parse_filter([d.strip() for d in data])          
-            data = condb.split('.') if '.' in condb else [condb]
-            filterb =  parse_filter([d.strip() for d in data])          
-            return f'{filtera} and {filterb}'
+        return ab_parse(conda.strip(), condb.strip(), 'and')
         ####
+
+    ### primary key
     if condition=='*':
         return
     if '%' in condition:
+        # not work in mysql right now
         return raw_sql(f'e.key like "{condition}"')
     if condition[0] == '(' and condition[-1] == ')':
         return f'"{condition[1:-1]}" in e.key'
     if condition[0] == ')' and condition[-1] == '(':
         return f'"{condition[1:-1]}" not in e.key'
+    if condition[0] == '~':
+        return f'e.key != "{condition[1:]}"'
     if condition[0] == '^' and condition[-1] == '$':
         return f'e.key == "{condition[1:-1]}"'
     if condition[0] == '^':
         return f'e.key.startswith("{condition[1:]}")'
     if condition[-1] == '$':
         return f'e.key.endswith("{condition[:-1]}")'
-    if condition[-1] == '?':
-        if '.' in condition:
-            data = condition.split('.')
-            return parse_filter([d.strip() for d in data])          
-        else:
-            return f'e.value[{fi(condition[:-1])}] != None'
-
 
     if '=' not in condition and '>' not in condition and '<' not in condition and \
-       '!' not in condition and ':' not in condition and '.' not in condition:
+       '!' not in condition and ':' not in condition and '.' not in condition and '?' not in condition:
         return f'e.key == "{condition}"'
 
-    data = condition.split('.') if '.' in condition else [condition]
-    return parse_filter([d.strip() for d in data])          
+    # json key
+    return parse_filter(condition)
