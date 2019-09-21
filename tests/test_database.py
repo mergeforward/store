@@ -13,7 +13,7 @@ def t():
     # return Cat(provider='postgres', user='dameng', password='pythonic', database='mytest')
 
 
-def xtest_add_article(t):
+def test_add_article(t):
     t.add({
         'title': '每日新闻 2019.08.06',
         'user': 'dameng',

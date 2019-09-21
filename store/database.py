@@ -316,24 +316,21 @@ class Store(object):
 
 
     @db_session
-    def add(self, value):
+    def add(self, value, key=None):
         hex = uuid.uuid1().hex
-        key = "store_{}".format(hex)
+        key = "_{}".format(hex) if not isinstance(key, str) else key
         self.store(key=key, value=value)
         return key
 
     @db_session
-    def _query_key(self, key, for_update=False):
-        if for_update:
-            return select(e for e in self.store if e.id == self.id).for_update().first()
-        return select(e for e in self.store if e.id == self.id).first()
-
-    @db_session
     def query_key(self, key, for_update=False):
-        elem = self._query_key(key, for_update=for_update)
+        elem = None
+        if for_update:
+            elem = select(e for e in self.store if e.id == self.id).for_update().first()
+        else:
+            elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
             return StoreMeta(elem, store=self.store)
-
 
     def adjust_slice(self, elems, for_update=False):
         if for_update:
