@@ -168,6 +168,16 @@ class Store(object):
                 provider=provider, 
                 filename=filename, 
                 create_db=True)
+        elif provider == 'mysql':
+            self.database = Database(
+                provider=provider, 
+                user=user or self.user, 
+                password=password or self.password,
+                host=host or self.host, 
+                port=port or self.port, 
+                database=database or self.database,
+                charset="utf8mb4"
+                )
         else:
             self.database = Database(
                 provider=provider, 
@@ -175,7 +185,8 @@ class Store(object):
                 password=password or self.password,
                 host=host or self.host, 
                 port=port or self.port, 
-                database=database or self.database)
+                database=database or self.database,
+            )
 
         self.provider = provider
 
@@ -192,7 +203,8 @@ class Store(object):
         )
 
         self.store = type(self.tablename, (self.database.Entity,), schema)
-        self.database.generate_mapping(create_tables=True, check_tables=True)
+        self.database.generate_mapping(create_tables=True, check_tables=True,
+        )
 
     def slice(self, begin, end):
         self.begin, self.end = begin, end
