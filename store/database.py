@@ -33,8 +33,6 @@ class StoreMetas:
     def __getitem__(self, key):
         if isinstance(key, int):
             return self.elems[key]
-        if isinstance(key, slice):
-            return self.elems[key]
         return [elem[key] for elem in self.elems]
 
     @db_session
@@ -51,10 +49,14 @@ class StoreMetas:
         if key in ['elems'] or key.startswith('_'):
             return object.__getattribute__(self, key)
 
-        if key in ['store', 'id', 'key', 'data', 'create', 'update', 'meta']:
-            return [elem.__getattribute__(key) for elem in self.elems]
+        return [elem.__getattribute__(key) for elem in self.elems]
 
-        return [elem[key] for elem in self.elems]
+    @db_session
+    def __setattr__(self, key, data):
+        if key in ['elems'] or key.startswith('_'):
+            return super().__setattr__(key, data)
+        for elem in self.elems:
+            elem.__setattr__(key, data)
 
 
 class StoreMeta:
@@ -133,13 +135,10 @@ class StoreMeta:
     def __getitem__(self, key):
         elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
-            if isinstance(elem.data, dict) or \
-               (isinstance(key, int) and isinstance(elem.data, list)) or \
-               (isinstance(key, int) and isinstance(elem.data, str)):
-                if isinstance(key, int):
-                    return elem.data[key]
-                else:
-                    return elem.data.get(key)
+            if isinstance(key, int):
+                return elem.data[key]
+            else:
+                return elem.data.get(key)
 
 
 class Store(object):
