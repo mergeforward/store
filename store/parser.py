@@ -10,14 +10,14 @@ def fi(data):
     else: 
         return f'"{data}"'
 
-# filter value
+# filter data
 def fv(key):
     filter = ''
     for i in range(len(key)):
         filter = f'[{fi(key[-1-i])}]' + filter
     return filter
 
-def parse_filter(data):
+def parse_filter(data, column='data'):
     # parse json condition
     for op in ['>=', '<=', '>', '<', '!=', '==', '=',  '!:', ':', '?']:
         if op in data:
@@ -29,7 +29,7 @@ def parse_filter(data):
             k = [d.strip() for d in k.split('.')] if '.' in k else [k]
             if op == '=':
                 op += '='
-            return  f'e.value{fv(k)} {op} {fi(v)}'
+            return  f'e.{column}{fv(k)} {op} {fi(v)}'
 
     # parse json key exists
     if '.' in data:
@@ -37,7 +37,7 @@ def parse_filter(data):
         key = [d.strip() for d in key]
     else:
         key = [data]
-    return f'e.value{fv(key)} != None'
+    return f'e.{column}{fv(key)} != None'
 
 def ab_parse(conda, condb, op):
         # if '||' in conda or '&&' in conda:
@@ -55,7 +55,7 @@ def ab_parse(conda, condb, op):
         filterb =  parse(condb)          
         return f'{filtera} {op} {filterb}'
 
-def parse(condition):
+def parse(condition, column="data"):
     if '||' in condition:
         conda, condb = condition.split('||', 1)
         # conda, condb = conda.strip(), condb.strip()
@@ -90,4 +90,4 @@ def parse(condition):
         return f'e.key == "{condition}"'
 
     # json key
-    return parse_filter(condition)
+    return parse_filter(condition, column=column)

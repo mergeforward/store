@@ -7,6 +7,15 @@ from datetime import datetime
 from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
                       db_session, delete, desc, select)
 from store.parser import parse
+try:
+    from cerberus import Validator
+    SCHEMA_CHECK = True
+except Exception:
+    SCHEMA_CHECK = False
+
+
+class StoreException(Exception):
+    pass
 
 class StoreMetas:
     def __init__(self, elems, store=None):
@@ -29,12 +38,12 @@ class StoreMetas:
         return [elem[key] for elem in self.elems]
 
     @db_session
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, data):
         if isinstance(key, int):
-            self.elems[key] = value
+            self.elems[key] = data
             return
         for elem in self.elems:
-            elem[key] = value
+            elem[key] = data
 
 
     @db_session
@@ -42,18 +51,9 @@ class StoreMetas:
         if key in ['elems'] or key.startswith('_'):
             return object.__getattribute__(self, key)
 
-        if key == 'store':
-            return [elem.store for elem in self.elems]
-        if key == 'id':
-            return [elem.id for elem in self.elems]
-        if key == 'key':
-            return [elem.key for elem in self.elems]
-        if key == 'value':
-            return [elem.value for elem in self.elems]
-        if key == 'create':
-            return [elem.create for elem in self.elems]
-        if key == 'update':
-            return [elem.update for elem in self.elems]
+        if key in ['store', 'id', 'key', 'data', 'create', 'update', 'meta']:
+            return [elem.__getattribute__(key) for elem in self.elems]
+
         return [elem[key] for elem in self.elems]
 
 
@@ -62,85 +62,94 @@ class StoreMeta:
         self.store = store
         self.id = elem.id
         self.key = elem.key
-        self.value = elem.value
+        self.data = elem.data
         self.create = elem.create.strftime("%Y-%m-%dT%H:%M:%S")
         self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
     def __str__(self):
-        return "id: {}, key: {}, value: {}, create: {}, update: {}".format(self.id, self.key, self.value, self.create, self.update)
+        return "id: {}, key: {}, data: {}, create: {}, update: {}".format(self.id, self.key, self.data, self.create, self.update)
 
     @db_session
-    def __assign__(self, value):
+    def __assign__(self, data):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
-            elem.value = value
+            elem.data = data
             elem.update = datetime.utcnow()
 
-            self.value = elem.value
+            self.data = elem.data
             self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
     @db_session
-    def __setattr__(self, key, value):
-        if key in ['store', 'id', 'key', 'value', 'create', 'update'] or key.startswith('_'):
-            return super().__setattr__(key, value)
+    def __setattr__(self, key, data):
+        if key in ['store', 'id', 'key', 'data', 'create', 'update'] or key.startswith('_'):
+            return super().__setattr__(key, data)
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
-            if isinstance(elem.value, dict):
-                elem.value[key] = value
+            if key == 'meta':
+                elem.meta = data
+                elem.update = datetime.utcnow()
+            elif isinstance(elem.data, dict):
+                elem.data[key] = data
                 elem.update = datetime.utcnow()
 
-                self.value = elem.value
+                self.data = elem.data
                 self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
             else:
-                raise Exception('value not dict!')
+                raise Exception('data not dict!')
 
     @db_session
     def __getattribute__(self, key):
-        if key in ['store', 'id', 'key', 'value', 'create', 'update'] or key.startswith('_'):
+        if key in ['store', 'id', 'key', 'data', 'create', 'update'] or key.startswith('_'):
             return object.__getattribute__(self, key)
 
         elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
-            if isinstance(elem.value, dict):
-                return elem.value.get(key)
+            if key=='meta':
+                return elem.meta
+            if isinstance(elem.data, dict):
+                return elem.data.get(key)
 
     @db_session
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, data):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
-            if isinstance(elem.value, dict) or \
-               (isinstance(key, int) and isinstance(elem.value, list)):
-                elem.value[key] = value
+            if isinstance(elem.data, dict) or \
+               (isinstance(key, int) and isinstance(elem.data, list)):
+                elem.data[key] = data
                 elem.update = datetime.utcnow()
 
-                self.value = elem.value
+                self.data = elem.data
                 self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
             else:
-                raise Exception('value not dict!')
+                raise Exception('data not dict!')
 
     @db_session
     def __getitem__(self, key):
         elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
-            if isinstance(elem.value, dict) or \
-               (isinstance(key, int) and isinstance(elem.value, list)) or \
-               (isinstance(key, int) and isinstance(elem.value, str)):
+            if isinstance(elem.data, dict) or \
+               (isinstance(key, int) and isinstance(elem.data, list)) or \
+               (isinstance(key, int) and isinstance(elem.data, str)):
                 if isinstance(key, int):
-                    return elem.value[key]
+                    return elem.data[key]
                 else:
-                    return elem.value.get(key)
+                    return elem.data.get(key)
+
+
 class Store(object):
     _safe_attrs = ['store', 'database', 'tablename', 
                    'begin', 'end', 'order', 
                    'add', 'register_attr', 'slice', 'adjust_slice', 'provider',
                    'query_key', 'count', 'desc', 'asc',
-                   'provider', 'user', 'password', 'host', 'port', 'database', 'filename'
+                   'query_meta', 'update_meta', 'delete_meta',
+                   'provider', 'user', 'password', 'host', 'port', 'database', 'filename',
+                   'schema', 'validate', 'version', 'model', 'meta',
                    ]
 
     provider = 'sqlite'
@@ -151,48 +160,94 @@ class Store(object):
     database = 'test'
     filename = 'database.sqlite'
     order = 'desc'
+    schema = None
+    begin = None
+    end = None
+    version = "meta"
+    model = None
+    meta = {}
+    
 
     def __init__(self,
                  provider=None, user=None, password=None,
                  host=None, port=None, database=None, filename=None,
-                 begin=None, end=None, order=None):
-        if not provider:
-            provider = self.provider
+                 begin=None, end=None, order=None,
+                 schema = None, validate=None, version="meta", model=None,
+                 meta = None
+                 ):
+        self.provider = provider or self.provider
+        self.filename = filename or self.filename
+        self.user = user or self.user
+        self.password = password or self.password
+        self.host = host or self.host
+        self.port = port or self.port
+        self.database = database or self.database
+        self.schema = schema or self.schema
+        self.begin = begin or self.begin
+        self.end = end or self.end
+        self.order = order or self.order
+        self.version = version or self.version
+        self.model = model or self.model
+        self.meta = meta or self.meta
 
         if provider == 'sqlite':
-            if not filename:
-                filename = self.filename 
-            if not filename.startswith('/'):
-                filename = os.getcwd()+'/' + filename
+            if not self.filename.startswith('/'):
+                self.filename = os.getcwd()+'/' + self.filename
+
             self.database = Database(
-                provider=provider, 
-                filename=filename, 
+                provider=self.provider, 
+                filename=self.filename, 
                 create_db=True)
         else:
             self.database = Database(
-                provider=provider, 
-                user=user or self.user, 
-                password=password or self.password,
-                host=host or self.host, 
-                port=port or self.port, 
-                database=database or self.database)
+                provider=self.provider, 
+                user=self.user, 
+                password=self.password,
+                host=self.host, 
+                port=self.port, 
+                database=self.database)
 
-        self.provider = provider
-
-        self.begin, self.end = begin, end
-        self.order = order or self.order
         self.tablename = self.__class__.__name__
 
-        schema = dict(
-            id=PrimaryKey(int, auto=True),
-            create=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
-            update=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
-            key=Required(str, index=True, unique=True),
-            value=Required(Json, volatile=True)
-        )
+        if not self.model:
+            if not version:
+                self.model = dict(
+                    id=PrimaryKey(int, auto=True),
+                    create=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
+                    update=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
+                    key=Required(str, index=True, unique=True),
+                    data=Required(Json, volatile=True)
+                )
+            else:
+                self.model = dict(
+                    id=PrimaryKey(int, auto=True),
+                    create=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
+                    update=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
+                    key=Required(str, index=True, unique=True),
+                    data=Required(Json, volatile=True, default={}),
+                    meta=Required(Json, volatile=True, default={})
+                )
 
-        self.store = type(self.tablename, (self.database.Entity,), schema)
+        self.store = type(self.tablename, (self.database.Entity,), self.model)
         self.database.generate_mapping(create_tables=True, check_tables=True)
+
+
+    def validate(self, data, extra=None, meta=None):
+        if SCHEMA_CHECK and self.schema:
+            validator = Validator()
+            if meta:
+                schema_version = meta.get("schema_version")
+                if schema_version:
+                    validator.schema = self.schema.get(schema_version)
+                else:
+                    validator.schema = self.schema
+            else:
+                validator.schema = self.schema
+            r = validator.validate(data)
+            if not r:
+                if extra:
+                    raise StoreException(f'{validator.errors}, extra: {extra}')
+                raise StoreException(validator.errors)
 
     def slice(self, begin, end):
         self.begin, self.end = begin, end
@@ -209,14 +264,16 @@ class Store(object):
             Store._safe_attrs.append(name)
 
     @db_session
-    def __setattr__(self, key, value):
+    def __setattr__(self, key, data):
         if key in Store._safe_attrs or key.startswith('_'):
-            return super().__setattr__(key, value)
+            return super().__setattr__(key, data)
+
+        self.validate(data, meta=self.meta)
         item = select(e for e in self.store if e.key == key).first()
         if item is None:
-            self.store(key=key, value=value)
+            self.store(key=key, data=data, meta=self.meta)
         else:
-            item.value = value
+            item.data = data
             item.update = datetime.utcnow()
 
     @db_session
@@ -226,13 +283,14 @@ class Store(object):
 
         elem = select(e for e in self.store if e.key == key).first()
         if elem:
+            self.validate(elem.data, meta=self.meta )
             return StoreMeta(elem, store=self.store)
         return None
 
     @db_session
     def count(self, key):
         if isinstance(key, slice):
-            raise Exception('not implemented!')
+            raise StoreException('not implemented!')
         elif isinstance(key, tuple):
             key='.'.join(key)
 
@@ -246,27 +304,28 @@ class Store(object):
     @db_session
     def __getitem__(self, key):
         if isinstance(key, slice):
-            raise Exception('not implemented!')
+            raise StoreException('not implemented!')
         elif isinstance(key, tuple):
             key='.'.join(key)
 
         # string key
         filters = parse(key)
-        # print('filter:', filters)
         elems = select(e for e in self.store)
         if filters:
             elems = elems.filter(filters)
         if self.order == 'desc':
             elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         elems = self.adjust_slice(elems, for_update=False)
+        for elem in elems:
+            self.validate(elem.data, meta=elem.meta, extra=elem.key )
         return StoreMetas(elems, store=self.store)
 
 
     @db_session
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, data):
 
         if isinstance(key, slice):
-            raise Exception('not implemented!')
+            raise StoreException('not implemented!')
         elif isinstance(key, tuple):
             key='.'.join(key)
         
@@ -280,17 +339,14 @@ class Store(object):
         if elems:
             now = datetime.utcnow()
             for elem in elems:
-                elem.value = value
+                elem.data = data
                 elem.update = now
         else:
             if key.isidentifier():
-                return self.__setattr__(key, value)
+                return self.__setattr__(key, data)
             raise Exception('Not Implemented!')
         return
 
-        
-
-            
 
     @db_session
     def __delitem__(self, key):
@@ -306,6 +362,7 @@ class Store(object):
             elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         if elems:
             for elem in elems:
+                self.validate(elem.data, meta=self.meta)
                 elem.delete()
         return
        
@@ -316,10 +373,11 @@ class Store(object):
 
 
     @db_session
-    def add(self, value, key=None):
+    def add(self, data, key=None):
+        self.validate(data, meta=self.meta)
         hex = uuid.uuid1().hex
         key = "_{}".format(hex) if not isinstance(key, str) else key
-        self.store(key=key, value=value)
+        self.store(key=key, data=data, meta=self.meta)
         return key
 
     @db_session
@@ -330,7 +388,39 @@ class Store(object):
         else:
             elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
+            self.validate(elem.data, meta=self.meta)
             return StoreMeta(elem, store=self.store)
+
+    @db_session
+    def query_meta(self, key, for_update=False):
+        if isinstance(key, slice):
+            raise StoreException('not implemented!')
+        elif isinstance(key, tuple):
+            key='.'.join(key)
+
+        # string key
+        filters = parse(key, "meta")
+        elems = select(e for e in self.store)
+        if filters:
+            elems = elems.filter(filters)
+        if self.order == 'desc':
+            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
+        elems = self.adjust_slice(elems, for_update=for_update)
+        for elem in elems:
+            self.validate(elem.data, extra=elem.key, meta=self.meta)
+        return StoreMetas(elems, store=self.store)
+
+    @db_session
+    def update_meta(self, cond, key, data):
+        elems = self.__getitem__(key=cond)
+        for elem in elems:
+            elem.meta[key] = data
+
+    @db_session
+    def delete_meta(self, cond, key):
+        elems = self.__getitem__(key=cond)
+        for elem in elems:
+            del elem.meta[key]
 
     def adjust_slice(self, elems, for_update=False):
         if for_update:

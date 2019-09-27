@@ -8,7 +8,7 @@ simple storage library
 """
 
 setup(
-    version='2019.09.08',
+    version='2019.09.13',
     name='store',
     url='https://github.com/mergeforward/store.git',
     license='MIT',
@@ -16,7 +16,7 @@ setup(
     author_email='pingf0@gmail.com',
     description='simple storage library',
     long_description=docs,
-    py_modules=['store'],
+    py_modules=['store', 'store.contrib'],
     # if you would be using a package instead use packages instead
     # of py_modules:
     packages=['store'],
