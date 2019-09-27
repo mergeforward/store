@@ -149,7 +149,7 @@ class Store(object):
                    'query_key', 'count', 'desc', 'asc',
                    'query_meta', 'update_meta', 'delete_meta',
                    'provider', 'user', 'password', 'host', 'port', 'database', 'filename',
-                   'schema', 'validate', 'version', 'model', 'meta',
+                   'schema', 'validate', 'model', 'meta',
                    ]
 
     provider = 'sqlite'
@@ -163,7 +163,6 @@ class Store(object):
     schema = None
     begin = None
     end = None
-    version = "meta"
     model = None
     meta = {}
     
@@ -186,11 +185,10 @@ class Store(object):
         self.begin = begin or self.begin
         self.end = end or self.end
         self.order = order or self.order
-        self.version = version or self.version
         self.model = model or self.model
         self.meta = meta or self.meta
 
-        if provider == 'sqlite':
+        if self.provider == 'sqlite':
             if not self.filename.startswith('/'):
                 self.filename = os.getcwd()+'/' + self.filename
 
@@ -198,35 +196,39 @@ class Store(object):
                 provider=self.provider, 
                 filename=self.filename, 
                 create_db=True)
-        else:
+        elif self.provider == 'mysql':
             self.database = Database(
                 provider=self.provider, 
                 user=self.user, 
                 password=self.password,
                 host=self.host, 
                 port=self.port, 
-                database=self.database)
+                database=self.database,
+                charset="utf8mb4"
+                )
+        elif self.provider == 'postgres':
+            self.database = Database(
+                provider=self.provider, 
+                user=self.user, 
+                password=self.password,
+                host=self.host, 
+                port=self.port, 
+                database=self.database,
+                )
+        else:
+            raise StoreException(f'provider {provider} not supported')
 
         self.tablename = self.__class__.__name__
 
         if not self.model:
-            if not version:
-                self.model = dict(
-                    id=PrimaryKey(int, auto=True),
-                    create=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
-                    update=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
-                    key=Required(str, index=True, unique=True),
-                    data=Required(Json, volatile=True)
-                )
-            else:
-                self.model = dict(
-                    id=PrimaryKey(int, auto=True),
-                    create=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
-                    update=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
-                    key=Required(str, index=True, unique=True),
-                    data=Required(Json, volatile=True, default={}),
-                    meta=Required(Json, volatile=True, default={})
-                )
+            self.model = dict(
+                id=PrimaryKey(int, auto=True),
+                create=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
+                update=Required(datetime, sql_default='CURRENT_TIMESTAMP', default=lambda: datetime.utcnow()),
+                key=Required(str, index=True, unique=True),
+                data=Required(Json, volatile=True, default={}),
+                meta=Required(Json, volatile=True, default={})
+            )
 
         self.store = type(self.tablename, (self.database.Entity,), self.model)
         self.database.generate_mapping(create_tables=True, check_tables=True)
