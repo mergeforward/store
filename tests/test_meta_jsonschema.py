@@ -10,20 +10,27 @@ from store.database import Store
 def t():
     class Cat(Store):
         meta = {
-            "schema_version": "v2"
+            "schema_version": "v2",
+            "schema_type": "jsonschema"
         }
         schema = {
             "v1": {
-                'title': {'type': 'string', 'required': True},
-                'user': {'type': 'string', 'required': True},
-                'content': {'type': 'string', 'required': True},
-                'likes': {'type': 'integer', 'required': False},
+                'type': 'object',
+                'properties': {
+                    'title': {'type': 'string'},
+                    'user': {'type': 'string'},
+                    'content': {'type': 'string'},
+                    'likes': {'type': 'integer'},
+                }
             },
             "v2": {
-                'title': {'type': 'string', 'required': True},
-                'user': {'type': 'string', 'required': True},
-                'content': {'type': 'string', 'required': True},
-                'likes': {'type': 'integer', 'required': True},
+                'type': 'object',
+                'properties': {
+                    'title': {'type': 'string'},
+                    'user': {'type': 'string'},
+                    'content': {'type': 'string'},
+                    'likes': {'type': 'integer'},
+                }
             },
         }
         provider='mysql'
@@ -34,7 +41,7 @@ def t():
     return Cat() 
 
 
-def xtest_nomal_should_be_added(t):
+def test_nomal_should_be_added(t):
     n = t.add({
         'title': '每日新闻 2019.08.06',
         'user': 'dameng',
@@ -47,12 +54,12 @@ def xtest_nomal_should_be_added(t):
 def test_update_meta(t):
     t.update_meta('likes=123', 'hello', 'world')
     es = t['likes=123']
-    print(es.meta)
+    print(es)
 
 def test_delete_meta(t):
     t.delete_meta('likes=123', 'hello')
     es = t['likes=123']
-    print(es.meta)
+    print(es)
 
 def xtest_all(t):
     print(t['*'])

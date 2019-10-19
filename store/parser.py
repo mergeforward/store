@@ -3,12 +3,23 @@ from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
 
 # filter_index
 def fi(data): 
+    if isinstance(data, str):
+        if data[0] in '0123456789.-+':
+            try:
+                value = int(data)
+                return value
+            except ValueError:
+                try:
+                    value = float(data)
+                    return value
+                except ValueError:
+                    pass
+        return f'"{data}"'
+    if isinstance(data, float): 
+        return float(data)
     if isinstance(data, int): 
         return int(data)
-    if isinstance(data, str) and data[0] in '0123456789' :
-        return int(data)
-    else: 
-        return f'"{data}"'
+    return f'"{data}"'
 
 # filter data
 def fv(key):
@@ -39,31 +50,31 @@ def parse_filter(data, column='data'):
         key = [data]
     return f'e.{column}{fv(key)} != None'
 
-def ab_parse(conda, condb, op):
+def ab_parse(conda, condb, op, column='data'):
         # if '||' in conda or '&&' in conda:
-        filtera, filterb = parse(conda), parse(condb)
+        filtera, filterb = parse(conda, column=column), parse(condb, column=column)
 
         if filtera and filterb:
             return f'{filtera} {op} {filterb}'
         if filtera:
-            filterb =  parse(condb)          
+            filterb =  parse(condb, column=column)          
             return f'{filtera} {op} {filterb}'
         if filterb:
-            filtera =  parse(conda)          
+            filtera =  parse(conda, column=column)          
             return f'{filtera} {op} {filterb}'
-        filtera =  parse(conda)          
-        filterb =  parse(condb)          
+        filtera =  parse(conda, column=column)          
+        filterb =  parse(condb, column=column)          
         return f'{filtera} {op} {filterb}'
 
 def parse(condition, column="data"):
     if '||' in condition:
         conda, condb = condition.split('||', 1)
         # conda, condb = conda.strip(), condb.strip()
-        return ab_parse(conda.strip(), condb.strip(), 'or')
+        return ab_parse(conda.strip(), condb.strip(), 'or', column=column)
 
     if '&&' in condition:
         conda, condb = condition.split('&&', 1)
-        return ab_parse(conda.strip(), condb.strip(), 'and')
+        return ab_parse(conda.strip(), condb.strip(), 'and', column=column)
         ####
 
     ### primary key

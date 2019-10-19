@@ -3,16 +3,45 @@ import os
 import uuid
 from copy import copy
 from datetime import datetime
-
+from pony.orm.ormtypes import TrackedValue
 from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
                       db_session, delete, desc, select)
 from store.parser import parse
+
+SCHEMA_CHECK = os.getenv('SCHEMA_CHECK', True)
+
 try:
     from cerberus import Validator
-    SCHEMA_CHECK = True
 except Exception:
-    SCHEMA_CHECK = False
+    pass
 
+try:
+    import jsonschema
+except Exception:
+    pass
+
+def get_json_value(data, key):
+    result = data
+    keys = key.split('.')
+    for k in keys:
+        try:
+            k = int(k)
+        except:
+            pass
+        result = result.__getitem__(k)
+    return result
+
+def set_json_value(data, key, value):
+    result = data
+    keys = key.split('.')
+    for k in keys[:-1]:
+        try:
+            k = int(k)
+        except:
+            pass
+        result = result.__getitem__(k)
+    result[keys[-1]] = value
+    
 
 class StoreException(Exception):
     pass
@@ -49,7 +78,7 @@ class StoreMetas:
         if key in ['elems'] or key.startswith('_'):
             return object.__getattribute__(self, key)
 
-        return [elem.__getattribute__(key) for elem in self.elems]
+        return [elem.__getattribute__(key).get_untracked() for elem in self.elems]
 
     @db_session
     def __setattr__(self, key, data):
@@ -65,6 +94,7 @@ class StoreMeta:
         self.id = elem.id
         self.key = elem.key
         self.data = elem.data
+        self.meta = elem.meta
         self.create = elem.create.strftime("%Y-%m-%dT%H:%M:%S")
         self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -85,16 +115,16 @@ class StoreMeta:
 
     @db_session
     def __setattr__(self, key, data):
-        if key in ['store', 'id', 'key', 'data', 'create', 'update'] or key.startswith('_'):
+        if key in ['store', 'id', 'key', 'data', 'meta', 'create', 'update'] or key.startswith('_'):
             return super().__setattr__(key, data)
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
-            if key == 'meta':
-                elem.meta = data
-                elem.update = datetime.utcnow()
-            elif isinstance(elem.data, dict):
+            # if key == 'meta':
+            #     elem.meta = data
+            #     elem.update = datetime.utcnow()
+            if isinstance(elem.data, dict):
                 elem.data[key] = data
                 elem.update = datetime.utcnow()
 
@@ -105,13 +135,13 @@ class StoreMeta:
 
     @db_session
     def __getattribute__(self, key):
-        if key in ['store', 'id', 'key', 'data', 'create', 'update'] or key.startswith('_'):
+        if key in ['store', 'id', 'key', 'data', 'meta', 'create', 'update'] or key.startswith('_'):
             return object.__getattribute__(self, key)
 
         elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
-            if key=='meta':
-                return elem.meta
+            # if key=='meta':
+            #     return elem.meta
             if isinstance(elem.data, dict):
                 return elem.data.get(key)
 
@@ -123,7 +153,11 @@ class StoreMeta:
         else:
             if isinstance(elem.data, dict) or \
                (isinstance(key, int) and isinstance(elem.data, list)):
-                elem.data[key] = data
+                copied = copy(elem.data)
+                set_json_value(copied, key, data)
+
+                elem.data = copied
+                # elem.data[key] = data
                 elem.update = datetime.utcnow()
 
                 self.data = elem.data
@@ -135,11 +169,11 @@ class StoreMeta:
     def __getitem__(self, key):
         elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
-            if isinstance(key, int):
-                return elem.data[key]
-            else:
-                return elem.data.get(key)
-
+            return get_json_value(elem.data, key)
+            # if isinstance(key, int):
+            #     return elem.data[key]
+            # else:
+            #     return elem.data.get(key)
 
 class Store(object):
     _safe_attrs = ['store', 'database', 'tablename', 
@@ -148,7 +182,8 @@ class Store(object):
                    'query_key', 'count', 'desc', 'asc',
                    'query_meta', 'update_meta', 'delete_meta',
                    'provider', 'user', 'password', 'host', 'port', 'database', 'filename',
-                   'schema', 'validate', 'model', 'meta',
+                   'schema', 
+                   'validate', 'model', 'meta',
                    ]
 
     provider = 'sqlite'
@@ -170,7 +205,8 @@ class Store(object):
                  provider=None, user=None, password=None,
                  host=None, port=None, database=None, filename=None,
                  begin=None, end=None, order=None,
-                 schema = None, validate=None, version="meta", model=None,
+                 schema = None, 
+                 validate=None, version="meta", model=None,
                  meta = None
                  ):
         self.provider = provider or self.provider
@@ -233,22 +269,36 @@ class Store(object):
         self.database.generate_mapping(create_tables=True, check_tables=True)
 
 
-    def validate(self, data, extra=None, meta=None):
-        if SCHEMA_CHECK and self.schema:
-            validator = Validator()
-            if meta:
-                schema_version = meta.get("schema_version")
-                if schema_version:
-                    validator.schema = self.schema.get(schema_version)
-                else:
-                    validator.schema = self.schema
+    def validate(self, data, meta=None, extra=None):
+        if SCHEMA_CHECK and meta:
+            schema_version = meta.get("schema_version")
+            schema_type = meta.get("schema_type")
+            schema = self.schema.get(schema_version) 
+
+            if isinstance(data, TrackedValue):
+                data = data.get_untracked()
+            if isinstance(schema, TrackedValue):
+                schema = schema.get_untracked()
+
+
+
+            if schema_type == 'cerberus':
+                validator = Validator()
+                r = validator.validate(data, schema)
+                if not r:
+                    if extra:
+                        raise StoreException(f'{schema_type}:{schema_type} {validator.errors}, extra: {extra}')
+                    raise StoreException(f'{schema_type}:{schema_type} {validator.errors}')
+            elif schema_type == 'jsonschema':
+                validator = jsonschema
+                try:
+                    validator.validate(data, schema)
+                except jsonschema.exceptions.ValidationError as e:
+                    if extra:
+                        raise StoreException(f'{schema_type}:{schema_type} {e}, extra: {extra}')
+                    raise StoreException(f'{schema_type}:{schema_type} {e}')
             else:
-                validator.schema = self.schema
-            r = validator.validate(data)
-            if not r:
-                if extra:
-                    raise StoreException(f'{validator.errors}, extra: {extra}')
-                raise StoreException(validator.errors)
+                raise StoreException(f'schema type invalid: {schema_type}')
 
     def slice(self, begin, end):
         self.begin, self.end = begin, end
@@ -264,7 +314,7 @@ class Store(object):
         if isinstance(name, str) and name not in Store._safe_attrs:
             Store._safe_attrs.append(name)
 
-    @db_session
+    @db_session(retry=3)
     def __setattr__(self, key, data):
         if key in Store._safe_attrs or key.startswith('_'):
             return super().__setattr__(key, data)
@@ -284,7 +334,7 @@ class Store(object):
 
         elem = select(e for e in self.store if e.key == key).first()
         if elem:
-            self.validate(elem.data, meta=self.meta )
+            self.validate(elem.data, meta=elem.meta )
             return StoreMeta(elem, store=self.store)
         return None
 
@@ -322,7 +372,7 @@ class Store(object):
         return StoreMetas(elems, store=self.store)
 
 
-    @db_session
+    @db_session(retry=3)
     def __setitem__(self, key, data):
 
         if isinstance(key, slice):
@@ -363,7 +413,7 @@ class Store(object):
             elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         if elems:
             for elem in elems:
-                self.validate(elem.data, meta=self.meta)
+                self.validate(elem.data, meta=elem.meta)
                 elem.delete()
         return
        
@@ -389,7 +439,7 @@ class Store(object):
         else:
             elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
-            self.validate(elem.data, meta=self.meta)
+            self.validate(elem.data, meta=elem.meta)
             return StoreMeta(elem, store=self.store)
 
     @db_session
@@ -408,7 +458,7 @@ class Store(object):
             elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
-            self.validate(elem.data, extra=elem.key, meta=self.meta)
+            self.validate(elem.data, extra=elem.key, meta=elem.meta)
         return StoreMetas(elems, store=self.store)
 
     @db_session

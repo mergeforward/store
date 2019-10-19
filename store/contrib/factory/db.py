@@ -1,5 +1,7 @@
 
+from copy import copy
 from store.database import Store
+
 
 class Singleton(type):
     _instances = {}
@@ -15,7 +17,11 @@ class StoreFactory(metaclass=Singleton):
     def make(self, classname, **kwargs):
         if classname in self.store.keys():
             return self.store[classname]
-        store_class = type(classname, (Store, ),  kwargs or self.kwargs)
+        copied_kwargs = copy(self.kwargs)
+        if kwargs and isinstance(kwargs, dict):
+            copied_kwargs.update(kwargs)
+        copied_kwargs['__metaclass__'] = Singleton
+        store_class = type(classname, (Store, ),  copied_kwargs)
         self.store[classname] = store_class
         return store_class
 
