@@ -8,10 +8,10 @@ from store.database import Store
 @pytest.fixture(scope="module")
 def t():
     class Cat(Store):
-        # provider='mysql'
-        # port=8306 
-        provider='postgres'
-        port=5432 
+        provider='mysql'
+        port=3306 
+        # provider='postgres'
+        # port=5432 
         password='dangerous123'
         database='mytest'
         user='root'

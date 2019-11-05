@@ -7,15 +7,15 @@ from store.database import Store
 
 @pytest.fixture(scope="module")
 def t():
-    class Cat(Store):
-        provider='postgres'
-        # provider='mysql'
-        # port=8306 
-        port=5432 
+    class Dog(Store):
+        provider='mysql'
+        port=3306 
+        # provider='postgres'
+        # port=5432 
         password='dangerous123'
         database='mytest'
         user='root'
-    return Cat() 
+    return Dog() 
 
 
 def test_update(t):

@@ -7,15 +7,15 @@ from store.database import Store
 
 @pytest.fixture(scope="module")
 def t():
-    class Cat(Store):
+    class Fish(Store):
         provider='postgres'
-        # provider='mysql'
-        # port=8306 
-        port=5432 
+        provider='mysql'
+        port=3306 
+        # port=5432 
         password='dangerous123'
         database='mytest'
         user='root'
-    return Cat() 
+    return Fish() 
 
 
 def test_add_article_should_find_matched_by_user_name(t):

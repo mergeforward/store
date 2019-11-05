@@ -41,7 +41,20 @@ def set_json_value(data, key, value):
             pass
         result = result.__getitem__(k)
     result[keys[-1]] = value
+
+    return data
     
+def del_json_key(data, key):
+    result = data
+    keys = key.split('.')
+    for k in keys[:-1]:
+        try:
+            k = int(k)
+        except:
+            pass
+        result = result.__getitem__(k)
+    del result[keys[-1]]
+    return result
 
 class StoreException(Exception):
     pass
@@ -87,8 +100,11 @@ class StoreMetas:
         for elem in self.elems:
             elem.__setattr__(key, data)
 
-
+STORE_META_SAFE_ATTR = ['store', 'id', 'key', 'data', 'meta', 'create', 'update',
+                   'update_meta', 'delete_meta',
+                   'replace_data', 'replace_meta', 'replace_all']
 class StoreMeta:
+
     def __init__(self, elem, store=None):
         self.store = store
         self.id = elem.id
@@ -114,16 +130,23 @@ class StoreMeta:
             self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
     @db_session
+    def __getattribute__(self, key):
+        if key in STORE_META_SAFE_ATTR or key.startswith('_'):
+            return object.__getattribute__(self, key)
+
+        elem = select(e for e in self.store if e.id == self.id).first()
+        if elem:
+            if isinstance(elem.data, dict):
+                return elem.data.get(key)
+                
+    @db_session
     def __setattr__(self, key, data):
-        if key in ['store', 'id', 'key', 'data', 'meta', 'create', 'update'] or key.startswith('_'):
+        if key in STORE_META_SAFE_ATTR or key.startswith('_'):
             return super().__setattr__(key, data)
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
         else:
-            # if key == 'meta':
-            #     elem.meta = data
-            #     elem.update = datetime.utcnow()
             if isinstance(elem.data, dict):
                 elem.data[key] = data
                 elem.update = datetime.utcnow()
@@ -133,17 +156,6 @@ class StoreMeta:
             else:
                 raise Exception('data not dict!')
 
-    @db_session
-    def __getattribute__(self, key):
-        if key in ['store', 'id', 'key', 'data', 'meta', 'create', 'update'] or key.startswith('_'):
-            return object.__getattribute__(self, key)
-
-        elem = select(e for e in self.store if e.id == self.id).first()
-        if elem:
-            # if key=='meta':
-            #     return elem.meta
-            if isinstance(elem.data, dict):
-                return elem.data.get(key)
 
     @db_session
     def __setitem__(self, key, data):
@@ -151,13 +163,11 @@ class StoreMeta:
         if elem is None:
             raise Exception('elem not found')
         else:
-            if isinstance(elem.data, dict) or \
-               (isinstance(key, int) and isinstance(elem.data, list)):
+            if isinstance(elem.data, dict) :
                 copied = copy(elem.data)
                 set_json_value(copied, key, data)
 
                 elem.data = copied
-                # elem.data[key] = data
                 elem.update = datetime.utcnow()
 
                 self.data = elem.data
@@ -170,10 +180,84 @@ class StoreMeta:
         elem = select(e for e in self.store if e.id == self.id).first()
         if elem:
             return get_json_value(elem.data, key)
-            # if isinstance(key, int):
-            #     return elem.data[key]
-            # else:
-            #     return elem.data.get(key)
+
+    @db_session
+    def __delitem__(self, key):
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
+        if isinstance(elem.data, dict) :
+            copied = copy(elem.data)
+            new_data = del_json_key(copied, key)
+
+            elem.data = new_data
+            elem.update = datetime.utcnow()
+
+            self.data = elem.data
+            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+        else:
+            elem.meta = {}
+
+
+    # similar to __setitem__
+    @db_session(retry=3)
+    def update_meta(self, key, meta):
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
+        if isinstance(elem.meta, dict) :
+            copied = copy(elem.meta)
+            set_json_value(copied, key, meta)
+
+            elem.meta = copied
+            elem.update = datetime.utcnow()
+
+            self.meta = elem.meta
+            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+        else:
+            elem.meta = {}
+
+    # similar to __delitem__
+    @db_session(retry=3)
+    def delete_meta(self, key):
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
+        if isinstance(elem.meta, dict) :
+            copied = copy(elem.meta)
+            new_meta = del_json_key(copied, key)
+
+            elem.meta = new_meta
+            elem.update = datetime.utcnow()
+
+            self.meta = elem.meta
+            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+        else:
+            elem.meta = {}
+
+
+    @db_session(retry=3)
+    def replace_meta(self, meta):
+        if isinstance(meta, dict):
+            elem = select(e for e in self.store if e.id == self.id).for_update().first()
+            elem.meta = meta
+            elem.update = datetime.utcnow()
+            self.meta = elem.meta
+            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+
+    @db_session(retry=3)
+    def replace_data(self, data):
+        if isinstance(data, dict):
+            elem = select(e for e in self.store if e.id == self.id).for_update().first()
+            elem.data = data
+            elem.update = datetime.utcnow()
+            self.data = elem.data
+            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+
+    @db_session(retry=3)
+    def replace_all(self, data, meta):
+        if isinstance(data, dict):
+            elem = select(e for e in self.store if e.id == self.id).for_update().first()
+            elem.data = data
+            elem.meta = meta
+            elem.update = datetime.utcnow()
+            self.data = elem.data
+            self.meta = elem.meta
+            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
 class Store(object):
     _safe_attrs = ['store', 'database', 'tablename', 
@@ -353,7 +437,7 @@ class Store(object):
         return elems.count()
 
     @db_session
-    def __getitem__(self, key):
+    def __getitem__(self, key, for_update=False):
         if isinstance(key, slice):
             raise StoreException('not implemented!')
         elif isinstance(key, tuple):
@@ -366,7 +450,7 @@ class Store(object):
             elems = elems.filter(filters)
         if self.order == 'desc':
             elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
-        elems = self.adjust_slice(elems, for_update=False)
+        elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
             self.validate(elem.data, meta=elem.meta, extra=elem.key )
         return StoreMetas(elems, store=self.store)
@@ -380,6 +464,21 @@ class Store(object):
         elif isinstance(key, tuple):
             key='.'.join(key)
         
+        self.validate(data, meta=self.meta)
+
+        if key.isidentifier():
+            if key in Store._safe_attrs or key.startswith('_'):
+                return super().__setattr__(key, data)
+
+            item = select(e for e in self.store if e.key == key).first()
+            if item is None:
+                self.store(key=key, data=data, meta=self.meta)
+            else:
+                item.data = data
+                item.update = datetime.utcnow()
+            return 
+
+
         filters = parse(key)
         elems = select(e for e in self.store)
         if filters:
@@ -393,10 +492,13 @@ class Store(object):
                 elem.data = data
                 elem.update = now
         else:
-            if key.isidentifier():
-                return self.__setattr__(key, data)
-            raise Exception('Not Implemented!')
-        return
+            # for key like 'Pod_xxx-xxx-xxx
+            item = select(e for e in self.store if e.key == key).first()
+            if item is None:
+                self.store(key=key, data=data, meta=self.meta)
+            else:
+                item.data = data
+                item.update = datetime.utcnow()
 
 
     @db_session
@@ -427,7 +529,7 @@ class Store(object):
     def add(self, data, key=None):
         self.validate(data, meta=self.meta)
         hex = uuid.uuid1().hex
-        key = "_{}".format(hex) if not isinstance(key, str) else key
+        key = "STORE_{}".format(hex) if not isinstance(key, str) else key
         self.store(key=key, data=data, meta=self.meta)
         return key
 
@@ -435,9 +537,9 @@ class Store(object):
     def query_key(self, key, for_update=False):
         elem = None
         if for_update:
-            elem = select(e for e in self.store if e.id == self.id).for_update().first()
+            elem = select(e for e in self.store if e.key == key).for_update().first()
         else:
-            elem = select(e for e in self.store if e.id == self.id).first()
+            elem = select(e for e in self.store if e.key == key).first()
         if elem:
             self.validate(elem.data, meta=elem.meta)
             return StoreMeta(elem, store=self.store)
@@ -461,17 +563,6 @@ class Store(object):
             self.validate(elem.data, extra=elem.key, meta=elem.meta)
         return StoreMetas(elems, store=self.store)
 
-    @db_session
-    def update_meta(self, cond, key, data):
-        elems = self.__getitem__(key=cond)
-        for elem in elems:
-            elem.meta[key] = data
-
-    @db_session
-    def delete_meta(self, cond, key):
-        elems = self.__getitem__(key=cond)
-        for elem in elems:
-            del elem.meta[key]
 
     def adjust_slice(self, elems, for_update=False):
         if for_update:

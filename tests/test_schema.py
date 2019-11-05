@@ -16,7 +16,7 @@ def t():
             'likes': {'type': 'integer', 'required': False},
         }
         provider='mysql'
-        port=8306 
+        port=3306 
         password='dangerous123'
         database='mytest'
         user='root'

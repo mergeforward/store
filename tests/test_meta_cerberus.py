@@ -28,7 +28,7 @@ def t():
             },
         }
         provider='mysql'
-        port=8306 
+        port=3306 
         password='dangerous123'
         database='mytest'
         user='root'
@@ -45,15 +45,15 @@ def xtest_nomal_should_be_added(t):
     assert t[n][0].user == 'dameng'
     assert t[n][0].content == 'hello world'
 
-def test_update_meta(t):
-    t.update_meta('likes=123', 'hello', 'world')
-    es = t['likes=123']
-    print(es.meta)
+# def test_update_meta(t):
+#     t.update_meta('likes=123', 'hello', 'world')
+#     es = t['likes=123']
+#     print(es.meta)
 
-def test_delete_meta(t):
-    t.delete_meta('likes=123', 'hello')
-    es = t['likes=123']
-    print(es.meta)
+# def test_delete_meta(t):
+#     t.delete_meta('likes=123', 'hello')
+#     es = t['likes=123']
+#     print(es.meta)
 
 def xtest_all(t):
     print(t['*'])

@@ -1,19 +1,14 @@
 from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
                       db_session, delete, desc, select, raw_sql)
 
+def check_special_str(data):
+    if len(data)>1:
+        if data[0] == '0' and data[1] == '0':
+            return False
+    return False
 # filter_index
 def fi(data): 
     if isinstance(data, str):
-        if data[0] in '0123456789.-+':
-            try:
-                value = int(data)
-                return value
-            except ValueError:
-                try:
-                    value = float(data)
-                    return value
-                except ValueError:
-                    pass
         return f'"{data}"'
     if isinstance(data, float): 
         return float(data)
@@ -40,6 +35,11 @@ def parse_filter(data, column='data'):
             k = [d.strip() for d in k.split('.')] if '.' in k else [k]
             if op == '=':
                 op += '='
+            if op in ['>=', '<=', '>', '<']:
+                fiv = fi(v)
+                if fiv[0] == '"' or fiv[-1] == '"':
+                    fiv = fiv[1:-1]
+                return  f'e.{column}{fv(k)} {op} {float(fiv)}'
             return  f'e.{column}{fv(k)} {op} {fi(v)}'
 
     # parse json key exists
