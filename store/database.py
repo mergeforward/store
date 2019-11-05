@@ -515,7 +515,7 @@ class Store(object):
             elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
         if elems:
             for elem in elems:
-                self.validate(elem.data, meta=elem.meta)
+                # self.validate(elem.data, meta=elem.meta)
                 elem.delete()
         return
        
