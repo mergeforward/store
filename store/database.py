@@ -102,7 +102,9 @@ class StoreMetas:
 
 STORE_META_SAFE_ATTR = ['store', 'id', 'key', 'data', 'meta', 'create', 'update',
                    'update_meta', 'delete_meta',
-                   'replace_data', 'replace_meta', 'replace_all']
+                   'replace_data', 'replace_meta', 'replace_all',
+                   'update_data_multi', 'update_meta_multi'
+                   ]
 class StoreMeta:
 
     def __init__(self, elem, store=None):
@@ -258,6 +260,42 @@ class StoreMeta:
             self.data = elem.data
             self.meta = elem.meta
             self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+
+    @db_session
+    def update_data_multi(self, data):
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
+        if elem is None:
+            raise Exception('elem not found')
+        else:
+            if isinstance(elem.data, dict) :
+                copied = copy(elem.data)
+                for key, value in data.items():
+                    set_json_value(copied, key, value)
+
+                elem.data = copied
+                elem.update = datetime.utcnow()
+
+                self.data = elem.data
+                self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+            else:
+                raise Exception('data not dict!')
+
+    @db_session(retry=3)
+    def update_meta_multi(self, meta):
+        elem = select(e for e in self.store if e.id == self.id).for_update().first()
+        if isinstance(elem.meta, dict) :
+            copied = copy(elem.meta)
+            for key, value in meta.items():
+                set_json_value(copied, key, value)
+
+            elem.meta = copied
+            elem.update = datetime.utcnow()
+
+            self.meta = elem.meta
+            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+        else:
+            elem.meta = {}
+
 
 class Store(object):
     _safe_attrs = ['store', 'database', 'tablename', 
@@ -568,22 +606,24 @@ class Store(object):
         if for_update:
             elems = elems.for_update()
         begin, end = self.begin, self.end
+
+        length = len(self)
         if begin and end:
             # pony doesn't support step here
             if begin < 0:
-                begin = len(self) + begin
+                begin = length + begin
             if end < 0:
-                end = len(self) + end
+                end = length + end
             if begin > end:
                 begin, end = end, begin
             elems = elems[begin:end]
         elif begin:
             if begin < 0:
-                begin = len(self) + begin
+                begin = length + begin
             elems = elems[begin:]
         elif end:
             if end < 0:
-                end = len(self) + end
+                end = length + end
             elems = elems[:end]
         else:
             elems = elems[:]
