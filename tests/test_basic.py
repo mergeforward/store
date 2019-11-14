@@ -89,7 +89,27 @@ def test_query_keys_existence(t):
 
     del t.a
     del t.b
+
+def test_0001_like_data(t):
+    t.stu_0001 ={
+        'id': '0001',
+        'name': 'xiaoming'
+    }
+    t.stu_0002 ={
+        'id': '0002',
+        'name': 'xiaochao'
+    }
+    elems = t['id=0001']
+    del t.stu_0001
+    del t.stu_0002
     
+def test_array_data(t):
+    t.array ={
+        'data': [{'id': '0001'}, {'id': '0002'}]
+    }
+    elems = t['data.*.id=0001']
+    print(elems)
+    del t.array
 
 if __name__ == "__main__":
     # class Cat(Store):

@@ -1,5 +1,7 @@
 from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
                       db_session, delete, desc, select, raw_sql)
+import json
+                      
 
 def check_special_str(data):
     if len(data)>1:
@@ -9,6 +11,8 @@ def check_special_str(data):
 # filter_index
 def fi(data): 
     if isinstance(data, str):
+        if data.startswith('"'):
+            return f'{data}'
         return f'"{data}"'
     if isinstance(data, float): 
         return float(data)
@@ -20,8 +24,31 @@ def fi(data):
 def fv(key):
     filter = ''
     for i in range(len(key)):
-        filter = f'[{fi(key[-1-i])}]' + filter
+        fk = key[-1-i]
+        try:
+            fk = int(fk)
+        except:
+            pass
+        filter = f'[{fi(fk)}]' + filter
     return filter
+
+def parse_liststr(data):
+    result = ''
+    for c in data:
+        if c == '[':
+            result += '["'
+        elif c == ',':
+            result += '","'
+        elif c == ']':
+            result += '"]'
+        else:
+            result += c
+    result = json.loads(result)
+    result = [e.strip() for e in result]
+    # return result
+    return json.dumps(result)
+    # return ''.join([e.strip() for e in result])
+    # return result
 
 def parse_filter(data, column='data'):
     # parse json condition
@@ -40,6 +67,14 @@ def parse_filter(data, column='data'):
                 if fiv[0] == '"' or fiv[-1] == '"':
                     fiv = fiv[1:-1]
                 return  f'e.{column}{fv(k)} {op} {float(fiv)}'
+
+            if op == ':':
+                liststr = parse_liststr(v)
+                return f'e.{column}{fv(k)} in {liststr}'
+
+            if op == '!:':
+                liststr = parse_liststr(v)
+                return f'e.{column}{fv(k)} not in {liststr}'
             return  f'e.{column}{fv(k)} {op} {fi(v)}'
 
     # parse json key exists
