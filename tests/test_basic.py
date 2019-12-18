@@ -108,8 +108,11 @@ def test_array_data(t):
         'data': [{'id': '0001'}, {'id': '0002'}]
     }
     elems = t['data.*.id=0001']
-    print(elems)
+    # print(elems)
     del t.array
+    del t.aaa
+    del t['a=b']
+    # print('^'*40)
 
 if __name__ == "__main__":
     # class Cat(Store):

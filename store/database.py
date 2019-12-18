@@ -487,7 +487,9 @@ class Store(object):
         if filters:
             elems = elems.filter(filters)
         if self.order == 'desc':
-            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
+            elems = elems.order_by(lambda o: (desc(o.update), desc(o.id)))
+        else:
+            elems = elems.order_by(lambda o: (o.update, o.id))
         elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
             self.validate(elem.data, meta=elem.meta, extra=elem.key )
@@ -522,7 +524,9 @@ class Store(object):
         if filters:
             elems = elems.filter(filters)
         if self.order_by == 'desc':
-            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
+            elems = elems.order_by(lambda o: (desc(o.update), desc(o.id)))
+        else:
+            elems = elems.order_by(lambda o: (o.update, o.id))
         elems = self.adjust_slice(elems, for_update=True)
         if elems:
             now = datetime.utcnow()
@@ -550,7 +554,9 @@ class Store(object):
         if filters:
             elems = elems.filter(filters)
         if self.order_by == 'desc':
-            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
+            elems = elems.order_by(lambda o: (desc(o.update), desc(o.id)))
+        else:
+            elems = elems.order_by(lambda o: (o.update, o.id))
         if elems:
             for elem in elems:
                 # self.validate(elem.data, meta=elem.meta)
@@ -595,7 +601,9 @@ class Store(object):
         if filters:
             elems = elems.filter(filters)
         if self.order == 'desc':
-            elems = elems.order_by(lambda o: desc(o.create)).order_by(lambda o: desc(o.id))
+            elems = elems.order_by(lambda o: (desc(o.update), desc(o.id)))
+        else:
+            elems = elems.order_by(lambda o: (o.update, o.id))
         elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
             self.validate(elem.data, extra=elem.key, meta=elem.meta)
