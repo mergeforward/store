@@ -5,7 +5,8 @@ from copy import copy
 from datetime import datetime
 from pony.orm.ormtypes import TrackedValue
 from pony.orm import (Database, Json, PrimaryKey, Required, commit, count,
-                      db_session, delete, desc, select)
+                      db_session, delete, desc, select, raw_sql)
+
 from store.parser import parse
 
 SCHEMA_CHECK = os.getenv('SCHEMA_CHECK', True)
@@ -41,7 +42,6 @@ def set_json_value(data, key, value):
             pass
         result = result.__getitem__(k)
     result[keys[-1]] = value
-
     return data
     
 def del_json_key(data, key):
@@ -306,6 +306,7 @@ class Store(object):
                    'provider', 'user', 'password', 'host', 'port', 'database', 'filename',
                    'schema', 
                    'validate', 'model', 'meta',
+                   'search'
                    ]
 
     provider = 'sqlite'
@@ -640,3 +641,82 @@ class Store(object):
     @db_session
     def __len__(self):
         return count(e for e in self.store)
+
+
+    @db_session
+    def search(self, condition, for_update=False, fuzzy=True):
+        elems = select(e for e in self.store)
+        if condition:
+            for key, value in condition.items():
+                if isinstance(value, str):
+                    if fuzzy:
+                        if self.provider == 'mysql':
+                            sql = f'json_search(`e`.`data`, "all", "%%{value}%%", NULL, "$$.{key}")'
+
+                            # elems = elems.filter(lambda e: raw_sql(sql))
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ like_regex "{value}" flag "i")\')'
+                            # print(sql, '????')
+                            elems = elems.filter(lambda e: raw_sql(sql))
+                    else:
+                        if self.provider == 'mysql':
+                            sql = f'json_search(`e`.`data`, "all", "{value}", NULL, "$$.{key}")'
+                            elems = elems.filter(lambda e: raw_sql(sql))
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == "{value}")\')'
+                            elems = elems.filter(lambda e: raw_sql(sql))
+                    # lambda_filters.append(raw_sql(sql))
+                else:
+                    if isinstance(value, list):
+                        if '.' in key:
+                            keys = key.split('.')
+                        else:
+                            keys = [key]
+
+                        if self.provider == 'mysql':
+                            # elems = elems.filter(lambda e: e.data[key] in value)
+                            for i,k in enumerate(keys):
+                                if i == 0:
+                                    sql = f'e.data["{k}"]'
+                                else:
+                                    sql += f'["{k}"]'
+                            sql += f' in {value}'
+
+
+                            elems = elems.filter(sql)
+                        else:
+                            sql = f'e.data'
+                            for i,k in enumerate(keys):
+                                if i == len(keys) - 1:
+                                    sql += '->>'
+                                else:
+                                    sql += '->'
+                                sql += f"'{k}'"
+
+                            # only string supported
+                            v = [f"'{e}'" for e in value]
+                            value_str = ', '.join(v)
+                            sql += f' in ({value_str})'
+
+                            # elems = elems.filter(sql)
+                            elems = elems.filter(lambda e: raw_sql(sql))
+                        # lambda_filters.append(raw_sql(sql))
+                    else:
+                        
+                        if self.provider == 'mysql':
+                            # elems = elems.filter(lambda e: e.data[key] == value)
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") = {value}'
+                            elems = elems.filter(lambda e: raw_sql(sql))
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == {value})\')'
+                            elems = elems.filter(lambda e: raw_sql(sql))
+
+        if self.order == 'desc':
+            elems = elems.order_by(lambda o: (desc(o.update), desc(o.id)))
+        else:
+            elems = elems.order_by(lambda o: (o.update, o.id))
+        elems = self.adjust_slice(elems, for_update=for_update)
+        for elem in elems:
+            self.validate(elem.data, meta=elem.meta, extra=elem.key )
+        return StoreMetas(elems, store=self.store)
+    
