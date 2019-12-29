@@ -100,7 +100,7 @@ class StoreMetas:
         for elem in self.elems:
             elem.__setattr__(key, data)
 
-STORE_META_SAFE_ATTR = ['store', 'id', 'key', 'data', 'meta', 'create', 'update',
+STORE_META_SAFE_ATTR = ['store', 'store_obj', 'id', 'key', 'data', 'meta', 'create', 'update',
                    'update_meta', 'delete_meta',
                    'replace_data', 'replace_meta', 'replace_all',
                    'update_data_multi', 'update_meta_multi'
@@ -108,7 +108,9 @@ STORE_META_SAFE_ATTR = ['store', 'id', 'key', 'data', 'meta', 'create', 'update'
 class StoreMeta:
 
     def __init__(self, elem, store=None):
-        self.store = store
+        self.store_obj = store
+        self.store = store.store
+
         self.id = elem.id
         self.key = elem.key
         self.data = elem.data
@@ -201,11 +203,14 @@ class StoreMeta:
 
     # similar to __setitem__
     @db_session(retry=3)
-    def update_meta(self, key, meta):
+    def update_meta(self, key, meta, force=False):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if isinstance(elem.meta, dict) :
             copied = copy(elem.meta)
             set_json_value(copied, key, meta)
+
+            if not force:
+                self.store_obj.validate(copied, meta=elem.meta, extra=elem.key)
 
             elem.meta = copied
             elem.update = datetime.utcnow()
@@ -233,27 +238,39 @@ class StoreMeta:
 
 
     @db_session(retry=3)
-    def replace_meta(self, meta):
+    def replace_meta(self, meta, force=False):
         if isinstance(meta, dict):
             elem = select(e for e in self.store if e.id == self.id).for_update().first()
+
+            if not force:
+                self.store_obj.validate(elem.data, meta=meta, extra=elem.key)
+
             elem.meta = meta
             elem.update = datetime.utcnow()
             self.meta = elem.meta
             self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
     @db_session(retry=3)
-    def replace_data(self, data):
+    def replace_data(self, data, force=False):
         if isinstance(data, dict):
             elem = select(e for e in self.store if e.id == self.id).for_update().first()
+
+            if not force:
+                self.store_obj.validate(data, meta=elem.meta, extra=elem.key)
+
             elem.data = data
             elem.update = datetime.utcnow()
             self.data = elem.data
             self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
     @db_session(retry=3)
-    def replace_all(self, data, meta):
+    def replace_all(self, data, meta, force=False):
         if isinstance(data, dict):
             elem = select(e for e in self.store if e.id == self.id).for_update().first()
+
+            if not force:
+                self.store_obj.validate(data, meta=meta, extra=elem.key)
+
             elem.data = data
             elem.meta = meta
             elem.update = datetime.utcnow()
@@ -262,7 +279,7 @@ class StoreMeta:
             self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
 
     @db_session
-    def update_data_multi(self, data):
+    def update_data_multi(self, data, force=False):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
             raise Exception('elem not found')
@@ -271,6 +288,9 @@ class StoreMeta:
                 copied = copy(elem.data)
                 for key, value in data.items():
                     set_json_value(copied, key, value)
+
+                if not force:
+                    self.store_obj.validate(copied, meta=elem.meta, extra=elem.key)
 
                 elem.data = copied
                 elem.update = datetime.utcnow()
@@ -281,12 +301,15 @@ class StoreMeta:
                 raise Exception('data not dict!')
 
     @db_session(retry=3)
-    def update_meta_multi(self, meta):
+    def update_meta_multi(self, meta, force=False):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if isinstance(elem.meta, dict) :
             copied = copy(elem.meta)
             for key, value in meta.items():
                 set_json_value(copied, key, value)
+
+            if not force:
+                self.store_obj.validate(elem.data, meta=copied, extra=elem.key)
 
             elem.meta = copied
             elem.update = datetime.utcnow()
@@ -458,7 +481,7 @@ class Store(object):
         elem = select(e for e in self.store if e.key == key).first()
         if elem:
             self.validate(elem.data, meta=elem.meta )
-            return StoreMeta(elem, store=self.store)
+            return StoreMeta(elem, store=self)
         return None
 
     @db_session
@@ -494,7 +517,7 @@ class Store(object):
         elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
             self.validate(elem.data, meta=elem.meta, extra=elem.key )
-        return StoreMetas(elems, store=self.store)
+        return StoreMetas(elems, store=self)
 
 
     @db_session(retry=3)
@@ -587,7 +610,7 @@ class Store(object):
             elem = select(e for e in self.store if e.key == key).first()
         if elem:
             self.validate(elem.data, meta=elem.meta)
-            return StoreMeta(elem, store=self.store)
+            return StoreMeta(elem, store=self)
 
     @db_session
     def query_meta(self, key, for_update=False):
@@ -608,7 +631,7 @@ class Store(object):
         elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
             self.validate(elem.data, extra=elem.key, meta=elem.meta)
-        return StoreMetas(elems, store=self.store)
+        return StoreMetas(elems, store=self)
 
 
     def adjust_slice(self, elems, for_update=False):
@@ -718,5 +741,5 @@ class Store(object):
         elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
             self.validate(elem.data, meta=elem.meta, extra=elem.key )
-        return StoreMetas(elems, store=self.store)
+        return StoreMetas(elems, store=self)
     
