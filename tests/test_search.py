@@ -27,10 +27,10 @@ def t():
                 'type': 'object',
             },
         }
-        provider='postgres'
-        port=5432 
-        # provider='mysql'
-        # port=3306 
+        # provider='postgres'
+        # port=5432 
+        provider='mysql'
+        port=3306 
         password='dangerous123'
         database='mytest'
         user='root'
@@ -50,6 +50,7 @@ def xtest_nomal_should_be_added(t):
             "b": "2",
             "c": {
                 "nest": "what3!",
+                "n1": 12,
                 "n2": "12"
             },
             "d": ["aa", "bb", "ab"]
@@ -60,12 +61,21 @@ def xtest_nomal_should_be_added(t):
 
 def test_search(t):
     # es = t.search({"user": "meng", "likes": 456})
-    # es = t.search({"likes": 123.1})
-    # es = t.search({"user": "me"})
-    # es = t.search({"extra.c.n2": 456.7})
-    # es = t.search({"extra.c.nest": 'what2'})
+    # es = t.search({"likes": {"op": ">", "val": 100}}, debug=True)
+    # es = t.search({"extra.c.n2": {"op": "=", "val": "12"}}, debug=True)
+    es = t.search({"extra.c.n1": {"op": "=", "val": 12}}, debug=True)
+    # es = t.search({"archive": False}, fuzzy=False, debug=True)
+    # es = t.search({"user": "meng"}, fuzzy=False, debug=True)
+    # es = t.search({"extra.c.n2": 456.7}, debug=True)
+    # es = t.search({"likes": 123}, debug=True)
+    # es = t.search({"extra.c.nest": 'what'}, debug=True)
+    # es = t.search({"extra.c.nest": 'what3!'}, fuzzy=False, debug=True)
     # es = t.search({"user": "meng", "extra.c.n2": 456.7})
-    es = t.search({"extra.c.n2": [456, "12"]})
+    # es = t.search({"extra.c.n2": ["456", "12"]}, debug=True)
+    # es = t.search({"likes": [123, "12"]}, debug=True)
+    # es = t.search({"archive": False}, fuzzy=False, debug=True)
+    # es = t.search({"likes": 123}, fuzzy=False, debug=True)
+    # es = t.search({"likes": [456, 12]}, debug=True)
     print('-'*40)
     print(es)
 

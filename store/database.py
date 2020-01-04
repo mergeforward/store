@@ -667,77 +667,115 @@ class Store(object):
 
 
     @db_session
-    def search(self, condition, for_update=False, fuzzy=True):
+    def search(self, condition, for_update=False, fuzzy=True, debug=False):
         elems = select(e for e in self.store)
         if condition:
             for key, value in condition.items():
-                if isinstance(value, str):
+                if isinstance(value, list):
+                    if '.' in key:
+                        keys = key.split('.')
+                    else:
+                        keys = [key]
+
+                    if self.provider == 'mysql':
+                        # elems = elems.filter(lambda e: e.data[key] in value)
+                        for i,k in enumerate(keys):
+                            if i == 0:
+                                sql = f'e.data["{k}"]'
+                            else:
+                                sql += f'["{k}"]'
+                        sql += f' in {value}'
+
+                        elems = elems.filter(sql)
+                    else:
+                        sql = f'e.data'
+                        for i,k in enumerate(keys):
+                            if i == len(keys) - 1:
+                                sql += '->>'
+                            else:
+                                sql += '->'
+                            sql += f"'{k}'"
+
+                        # only string supported
+                        v = [f"'{e}'" if isinstance(e, str) else f"{e}" for e in value]
+                        # v = [f"'{e}'" for e in value]
+                        value_str = ', '.join(v)
+                        sql += f' in ({value_str})'
+
+                        # elems = elems.filter(sql)
+                        elems = elems.filter(lambda e: raw_sql(sql))
+                    # lambda_filters.append(raw_sql(sql))
+                elif isinstance(value, dict):
+
+                    op = value.get('operator') or value.get('op')  
+                    val = value.get('value') or value.get('val') 
+                    if self.provider == 'mysql':
+                        if op == '==':
+                            op = '='
+                        # elems = elems.filter(lambda e: e.data[key] == value)
+                        # sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
+                        if isinstance(val, str):
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") {op} "{val}"'
+                        else:
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
+                        elems = elems.filter(lambda e: raw_sql(sql))
+                    else:
+                        if op == '=':
+                            op = '=='
+                        if isinstance(val, str):
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} "{val}")\')'
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} {val})\')'
+                        elems = elems.filter(lambda e: raw_sql(sql))
+                elif isinstance(value, bool):
+                    if self.provider == 'mysql':
+                        if value == True:
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") = true'
+                        else:
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") = false'
+                        elems = elems.filter(lambda e: raw_sql(sql))
+                    else:
+                        if value == True:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == true)\')'
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == false)\')'
+                        elems = elems.filter(lambda e: raw_sql(sql))
+                elif isinstance(value, int) or isinstance(value, float):
+                    if self.provider == 'mysql':
+                        sql = f'json_extract(`e`.`data`, "$$.{key}") = {value}'
+                        elems = elems.filter(lambda e: raw_sql(sql))
+                    else:
+                        sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == {value})\')'
+                        elems = elems.filter(lambda e: raw_sql(sql))
+                elif isinstance(value, str):
                     if fuzzy:
                         if self.provider == 'mysql':
                             sql = f'json_search(`e`.`data`, "all", "%%{value}%%", NULL, "$$.{key}")'
-
-                            # elems = elems.filter(lambda e: raw_sql(sql))
+                            elems = elems.filter(lambda e: raw_sql(sql))
                         else:
                             sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ like_regex "{value}" flag "i")\')'
-                            # print(sql, '????')
                             elems = elems.filter(lambda e: raw_sql(sql))
                     else:
                         if self.provider == 'mysql':
-                            sql = f'json_search(`e`.`data`, "all", "{value}", NULL, "$$.{key}")'
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") = "{value}"'
                             elems = elems.filter(lambda e: raw_sql(sql))
                         else:
+                            # sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == "{value}")\')'
                             sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == "{value}")\')'
-                            elems = elems.filter(lambda e: raw_sql(sql))
+                            # sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == false)\')'
+                            lems = elems.filter(lambda e: raw_sql(sql))
                     # lambda_filters.append(raw_sql(sql))
                 else:
-                    if isinstance(value, list):
-                        if '.' in key:
-                            keys = key.split('.')
-                        else:
-                            keys = [key]
-
-                        if self.provider == 'mysql':
-                            # elems = elems.filter(lambda e: e.data[key] in value)
-                            for i,k in enumerate(keys):
-                                if i == 0:
-                                    sql = f'e.data["{k}"]'
-                                else:
-                                    sql += f'["{k}"]'
-                            sql += f' in {value}'
-
-
-                            elems = elems.filter(sql)
-                        else:
-                            sql = f'e.data'
-                            for i,k in enumerate(keys):
-                                if i == len(keys) - 1:
-                                    sql += '->>'
-                                else:
-                                    sql += '->'
-                                sql += f"'{k}'"
-
-                            # only string supported
-                            v = [f"'{e}'" for e in value]
-                            value_str = ', '.join(v)
-                            sql += f' in ({value_str})'
-
-                            # elems = elems.filter(sql)
-                            elems = elems.filter(lambda e: raw_sql(sql))
-                        # lambda_filters.append(raw_sql(sql))
-                    else:
-                        
-                        if self.provider == 'mysql':
-                            # elems = elems.filter(lambda e: e.data[key] == value)
-                            sql = f'json_extract(`e`.`data`, "$$.{key}") = {value}'
-                            elems = elems.filter(lambda e: raw_sql(sql))
-                        else:
-                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == {value})\')'
-                            elems = elems.filter(lambda e: raw_sql(sql))
+                    raise Exception('value type not support')
 
         if self.order == 'desc':
             elems = elems.order_by(lambda o: (desc(o.update), desc(o.id)))
         else:
             elems = elems.order_by(lambda o: (o.update, o.id))
+        if debug:
+            print('\n\n----sql----')
+            print(elems.get_sql())
+            print('-----------\n\n')
         elems = self.adjust_slice(elems, for_update=for_update)
         for elem in elems:
             self.validate(elem.data, meta=elem.meta, extra=elem.key )
