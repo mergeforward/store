@@ -63,7 +63,7 @@ def test_search(t):
     # es = t.search({"user": "meng", "likes": 456})
     # es = t.search({"likes": {"op": ">", "val": 100}}, debug=True)
     # es = t.search({"extra.c.n2": {"op": "=", "val": "12"}}, debug=True)
-    es = t.search({"extra.c.n1": {"op": "=", "val": 12}}, debug=True)
+    es, total = t.search({"extra.c.n1": {"op": "=", "val": 12}}, debug=True, begin=0, end=2)
     # es = t.search({"archive": False}, fuzzy=False, debug=True)
     # es = t.search({"user": "meng"}, fuzzy=False, debug=True)
     # es = t.search({"extra.c.n2": 456.7}, debug=True)
@@ -78,6 +78,7 @@ def test_search(t):
     # es = t.search({"likes": [456, 12]}, debug=True)
     print('-'*40)
     print(es)
+    print(total)
 
 # def test_delete_meta(t):
 #     t.delete_meta('likes=123', 'hello')
