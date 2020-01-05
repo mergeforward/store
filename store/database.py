@@ -125,7 +125,7 @@ class StoreMeta:
     def __assign__(self, data):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
-            raise Exception('elem not found')
+            raise StoreException('elem not found')
         else:
             elem.data = data
             elem.update = datetime.utcnow()
@@ -149,7 +149,7 @@ class StoreMeta:
             return super().__setattr__(key, data)
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
-            raise Exception('elem not found')
+            raise StoreException('elem not found')
         else:
             if isinstance(elem.data, dict):
                 elem.data[key] = data
@@ -158,14 +158,14 @@ class StoreMeta:
                 self.data = elem.data
                 self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
             else:
-                raise Exception('data not dict!')
+                raise StoreException('data not dict!')
 
 
     @db_session
     def __setitem__(self, key, data):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
-            raise Exception('elem not found')
+            raise StoreException('elem not found')
         else:
             if isinstance(elem.data, dict) :
                 copied = copy(elem.data)
@@ -177,7 +177,7 @@ class StoreMeta:
                 self.data = elem.data
                 self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
             else:
-                raise Exception('data not dict!')
+                raise StoreException('data not dict!')
 
     @db_session
     def __getitem__(self, key):
@@ -188,17 +188,20 @@ class StoreMeta:
     @db_session
     def __delitem__(self, key):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
-        if isinstance(elem.data, dict) :
-            copied = copy(elem.data)
-            new_data = del_json_key(copied, key)
+        if elem:
+            elem.delete()
 
-            elem.data = new_data
-            elem.update = datetime.utcnow()
+        # if isinstance(elem.data, dict) :
+        #     copied = copy(elem.data)
+        #     new_data = del_json_key(copied, key)
 
-            self.data = elem.data
-            self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
-        else:
-            elem.meta = {}
+        #     elem.data = new_data
+        #     elem.update = datetime.utcnow()
+
+        #     self.data = elem.data
+        #     self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
+        # else:
+        #     elem.meta = {}
 
 
     # similar to __setitem__
@@ -282,7 +285,7 @@ class StoreMeta:
     def update_data_multi(self, data, force=False):
         elem = select(e for e in self.store if e.id == self.id).for_update().first()
         if elem is None:
-            raise Exception('elem not found')
+            raise StoreException('elem not found')
         else:
             if isinstance(elem.data, dict) :
                 copied = copy(elem.data)
@@ -298,7 +301,7 @@ class StoreMeta:
                 self.data = elem.data
                 self.update = elem.update.strftime("%Y-%m-%dT%H:%M:%S")
             else:
-                raise Exception('data not dict!')
+                raise StoreException('data not dict!')
 
     @db_session(retry=3)
     def update_meta_multi(self, meta, force=False):
@@ -329,7 +332,7 @@ class Store(object):
                    'provider', 'user', 'password', 'host', 'port', 'database', 'filename',
                    'schema', 
                    'validate', 'model', 'meta',
-                   'search'
+                   'search', 'delete','create','update'
                    ]
 
     provider = 'sqlite'
@@ -415,36 +418,6 @@ class Store(object):
         self.database.generate_mapping(create_tables=True, check_tables=True)
 
 
-    def validate(self, data, meta=None, extra=None):
-        if SCHEMA_CHECK and meta:
-            schema_version = meta.get("schema_version")
-            schema_type = meta.get("schema_type")
-            schema = self.schema.get(schema_version) 
-
-            if isinstance(data, TrackedValue):
-                data = data.get_untracked()
-            if isinstance(schema, TrackedValue):
-                schema = schema.get_untracked()
-
-
-
-            if schema_type == 'cerberus':
-                validator = Validator()
-                r = validator.validate(data, schema)
-                if not r:
-                    if extra:
-                        raise StoreException(f'{schema_type}:{schema_type} {validator.errors}, extra: {extra}')
-                    raise StoreException(f'{schema_type}:{schema_type} {validator.errors}')
-            elif schema_type == 'jsonschema':
-                validator = jsonschema
-                try:
-                    validator.validate(data, schema)
-                except jsonschema.exceptions.ValidationError as e:
-                    if extra:
-                        raise StoreException(f'{schema_type}:{schema_type} {e}, extra: {extra}')
-                    raise StoreException(f'{schema_type}:{schema_type} {e}')
-            else:
-                raise StoreException(f'schema type invalid: {schema_type}')
 
     def slice(self, begin, end):
         self.begin, self.end = begin, end
@@ -570,7 +543,7 @@ class Store(object):
     @db_session
     def __delitem__(self, key):
         if isinstance(key, slice):
-            raise Exception('not implemented!')
+            raise StoreException('not implemented!')
         elif isinstance(key, tuple):
             key = '.'.join(key)
         filters = parse(key)
@@ -592,14 +565,6 @@ class Store(object):
     def __delattr__(self, key):
         delete(e for e in self.store if e.key == key)
 
-
-    @db_session
-    def add(self, data, key=None):
-        self.validate(data, meta=self.meta)
-        hex = uuid.uuid1().hex
-        key = "STORE_{}".format(hex) if not isinstance(key, str) else key
-        self.store(key=key, data=data, meta=self.meta)
-        return key
 
     @db_session
     def query_key(self, key, for_update=False):
@@ -664,6 +629,118 @@ class Store(object):
     @db_session
     def __len__(self):
         return count(e for e in self.store)
+
+    #### explicity crud
+    def validate(self, data, meta=None, extra=None):
+        if SCHEMA_CHECK and meta:
+            schema_version = meta.get("schema_version")
+            schema_type = meta.get("schema_type")
+            schema = self.schema.get(schema_version) 
+
+            if isinstance(data, TrackedValue):
+                data = data.get_untracked()
+            if isinstance(schema, TrackedValue):
+                schema = schema.get_untracked()
+
+            if schema_type == 'cerberus':
+                validator = Validator()
+                r = validator.validate(data, schema)
+                if not r:
+                    if extra:
+                        raise StoreException(f'{schema_type}:{schema_type} {validator.errors}, extra: {extra}')
+                    raise StoreException(f'{schema_type}:{schema_type} {validator.errors}')
+            elif schema_type == 'jsonschema':
+                validator = jsonschema
+                try:
+                    validator.validate(data, schema)
+                except jsonschema.exceptions.ValidationError as e:
+                    if extra:
+                        raise StoreException(f'{schema_type}:{schema_type} {e}, extra: {extra}')
+                    raise StoreException(f'{schema_type}:{schema_type} {e}')
+            else:
+                raise StoreException(f'schema type invalid: {schema_type}')
+
+    @db_session
+    def add(self, data, meta=None, key=None):
+        if not meta:
+            meta=self.meta
+
+        self.validate(data, meta=meta)
+
+        hex = uuid.uuid1().hex
+        key = f"STORE_{hex}" if not isinstance(key, str) else key
+        elem = select(e for e in self.store if e.key == key).first()
+        if elem is not None:
+            hex = uuid.uuid1().hex
+            key = f"STORE_{hex}"
+            elem = select(e for e in self.store if e.key == key).first()
+            if elem is not None:
+                raise StoreException('add failed')
+        self.store(key=key, data=data, meta=meta)
+        return key
+
+
+    @db_session
+    def create(self, key, data, meta=None, update=True):
+        if not meta:
+            meta=self.meta
+
+        self.validate(data, meta=meta)
+
+        elem = select(e for e in self.store if e.key == key).for_update().first()
+        if elem is None:
+            self.store(key=key, data=data, meta=self.meta)
+        else:
+            if update:
+                elem.data = data
+                elem.meta = meta
+                elem.update = datetime.utcnow()
+            else:
+                detail = f'elem existed, key: {key}'
+                raise StoreException(detail)
+        return key
+
+
+    @db_session
+    def update(self, condition, data=None, meta=None, patch=False, force=False):
+        elems, _ = self.search(condition, mode='raw')
+        elems = elems.for_update()
+        elems = elems[:]
+        for elem in elems:
+            if data:
+                if patch:
+                    copied = copy(elem.data)
+                    for key,value in data.items():
+                        set_json_value(copied, key, value)
+
+                    if not force:
+                        self.validate(copied, meta=elem.meta, extra=elem.key)
+                    elem.data = copied
+                    elem.update = datetime.utcnow()
+                else:
+                    elem.data = data
+                    elem.update = datetime.utcnow()
+            if meta:
+                if patch:
+                    copied = copy(elem.meta)
+                    for key,value in meta.items():
+                        set_json_value(copied, key, value)
+
+                    if not force:
+                        self.validate(elem.data, meta=meta, extra=elem.key)
+                    elem.meta = copied
+                    elem.update = datetime.utcnow()
+                else:
+                    elem.meta = meta
+                    elem.update = datetime.utcnow()
+
+    @db_session
+    def delete(self, condition):
+        elems, _ = self.search(condition, mode='raw')
+        elems = elems.for_update()
+        elems = elems[:]
+        for elem in elems:
+            elem.delete()
 
     @db_session
     def search(self, condition, for_update=False, fuzzy=True, debug=False, mode='normal', order='desc', order_by=None, begin=None, end=None):
@@ -765,7 +842,7 @@ class Store(object):
                             lems = elems.filter(lambda e: raw_sql(sql))
                     # lambda_filters.append(raw_sql(sql))
                 else:
-                    raise Exception('value type not support')
+                    raise StoreException('value type not support')
         if mode == 'raw':
             if debug:
                 print('\n\n----sql----')

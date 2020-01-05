@@ -37,8 +37,9 @@ def t():
     return Article() 
 
 
-def xtest_nomal_should_be_added(t):
-    n = t.add({
+def test_nomal_should_be_added(t):
+    # t.update({"likes": 123}, {"user": "meng2"}, patch=True)
+    n = t.create('123', {
         'title': '每日新闻 2019.08.06',
         'user': 'meng',
         'content': 'hello world',
@@ -55,7 +56,7 @@ def xtest_nomal_should_be_added(t):
             },
             "d": ["aa", "bb", "ab"]
         }
-    })
+    }, update=True)
     assert t[n][0].user == 'meng'
     assert t[n][0].content == 'hello world'
 
@@ -81,6 +82,10 @@ def test_search(t):
         print(e)
     print(total)
 
+def xtest_delete(t):
+    t.delete({"user": "meng"})
+    es,total = t.search({"user": "meng"}, debug=True)
+    print(es)
 # def test_delete_meta(t):
 #     t.delete_meta('likes=123', 'hello')
 #     es = t['likes=123']
