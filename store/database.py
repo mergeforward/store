@@ -785,24 +785,45 @@ class Store(object):
 
                     op = value.get('operator') or value.get('op')  
                     val = value.get('value') or value.get('val') 
-                    if self.provider == 'mysql':
-                        if op == '==':
-                            op = '='
-                        # elems = elems.filter(lambda e: e.data[key] == value)
-                        # sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
-                        if isinstance(val, str):
-                            sql = f'json_extract(`e`.`data`, "$$.{key}") {op} "{val}"'
+                    if op == 'in':
+                        if isinstance(val, list):
+                            len_val = len(val)
+                            if len_val == 0:
+                                pass
+                            if len_val == 1:
+                                elems = elems.filter(lambda e: val[0] in e.data[key])
+                            elif len_val ==2:
+                                elems = elems.filter(lambda e: val[0] in e.data[key] or val[1] in e.data[key])
+                            elif len_val ==3:
+                                elems = elems.filter(lambda e: val[0] in e.data[key] or val[1] in e.data[key] 
+                                                                                     or val[2] in e.data[key])
+                            elif len_val ==4:
+                                elems = elems.filter(lambda e: val[0] in e.data[key] or val[1] in e.data[key] 
+                                                            or val[2] in e.data[key] or val[3] in e.data[key])
+                            else:
+                                raise StoreException('in operator len max size reached')
+
                         else:
-                            sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
-                        elems = elems.filter(lambda e: raw_sql(sql))
+                            elems = elems.filter(lambda e: val in e.data[key])
                     else:
-                        if op == '=':
-                            op = '=='
-                        if isinstance(val, str):
-                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} "{val}")\')'
+                        if self.provider == 'mysql':
+                            if op == '==':
+                                op = '='
+                            # elems = elems.filter(lambda e: e.data[key] == value)
+                            # sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
+                            if isinstance(val, str):
+                                sql = f'json_extract(`e`.`data`, "$$.{key}") {op} "{val}"'
+                            else:
+                                sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
+                            elems = elems.filter(lambda e: raw_sql(sql))
                         else:
-                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} {val})\')'
-                        elems = elems.filter(lambda e: raw_sql(sql))
+                            if op == '=':
+                                op = '=='
+                            if isinstance(val, str):
+                                sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} "{val}")\')'
+                            else:
+                                sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} {val})\')'
+                            elems = elems.filter(lambda e: raw_sql(sql))
                 elif isinstance(value, bool):
                     if self.provider == 'mysql':
                         if value == True:

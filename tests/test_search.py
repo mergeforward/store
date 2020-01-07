@@ -45,7 +45,7 @@ def test_nomal_should_be_added(t):
         'content': 'hello world',
         'likes': 123,
         'archive': False,
-        'l': ["a", "b", "c"],
+        'l': ["a", "b", "c", "dameng"],
         'extra': {
             "a": "1",
             "b": "2",
@@ -63,7 +63,10 @@ def test_nomal_should_be_added(t):
 def test_search(t):
     # es = t.search({"user": "meng", "likes": 456})
     # es = t.search({"likes": {"op": ">", "val": 100}}, debug=True)
-    es, total = t.search({"extra.c.n2": {"op": "=", "val": "12"}}, debug=True)
+    # es, total = t.search({"extra.c.n2": {"op": "=", "val": "12"}}, debug=True)
+    es, total = t.search({"l": {"op": "in", "val": ["da", "c1", 'a']}}, debug=True)
+    # es, total = t.search({"user": ["a", "me", "meng"]}, debug=True)
+    # es, total = t.search({"l":"da"}, debug=True)
     # es, total = t.search({"extra.c.n1": {"op": "=", "val": 12}}, debug=True, begin=0, end=1, mode='normal')
     # es = t.search({"archive": False}, fuzzy=False, debug=True)
     # es = t.search({"user": "meng"}, fuzzy=False, debug=True)
