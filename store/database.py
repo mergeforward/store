@@ -785,26 +785,58 @@ class Store(object):
 
                     op = value.get('operator') or value.get('op')  
                     val = value.get('value') or value.get('val') 
-                    if op == 'in':
+                    if op == 'in' or op == 'any_in':
                         if isinstance(val, list):
-                            len_val = len(val)
-                            if len_val == 0:
-                                pass
-                            if len_val == 1:
-                                elems = elems.filter(lambda e: val[0] in e.data[key])
-                            elif len_val ==2:
-                                elems = elems.filter(lambda e: val[0] in e.data[key] or val[1] in e.data[key])
-                            elif len_val ==3:
-                                elems = elems.filter(lambda e: val[0] in e.data[key] or val[1] in e.data[key] 
-                                                                                     or val[2] in e.data[key])
-                            elif len_val ==4:
-                                elems = elems.filter(lambda e: val[0] in e.data[key] or val[1] in e.data[key] 
-                                                            or val[2] in e.data[key] or val[3] in e.data[key])
+                            if self.provider == 'mysql':
+                                sqls = []
+                                for v in val:
+                                    sql = f'(json_contains(`e`.`data`, \'["{v}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{v}\'))'
+                                    sqls.append(sql)
+                                sql = ' OR '.join(sqls)
+                                elems = elems.filter(lambda e: raw_sql(sql))
                             else:
-                                raise StoreException('in operator len max size reached')
+                                if '.' in key:
+                                    key = key.replace('.', ',')
+                                    # raise StoreException('jsonpath not support for in operator')
+                                sqls = []
+                                for v in val:
+                                    sql = f'("e"."data" #> \'{{ {key} }}\' ? \'{v}\')'
+                                    sqls.append(sql)
+                                sql = ' OR '.join(sqls)
+                                elems = elems.filter(lambda e: raw_sql(sql))
 
                         else:
-                            elems = elems.filter(lambda e: val in e.data[key])
+                            if self.provider == 'mysql':
+                                sql = f'(json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
+                                elems = elems.filter(lambda e: raw_sql(sql))
+                            else:
+                                if '.' in key:
+                                    key = key.replace('.', ',')
+                                    # raise StoreException('jsonpath not support for in operator')
+                                sql = f'("e"."data" #> \'{{ {key} }}\' ? \'{val}\')'
+                                elems = elems.filter(lambda e: raw_sql(sql))
+                    if op == 'ain' or op == 'all_in':
+                        if isinstance(val, list):
+                            if self.provider == 'mysql':
+                                sql = f'json_contains(`e`.`data`, \'{json.dumps(val)}\', \'$$.{key}\')'
+                                elems = elems.filter(lambda e: raw_sql(sql))
+                            else:
+                                if '.' in key:
+                                    key = key.replace('.', ',')
+                                    # raise StoreException('jsonpath not support for in operator')
+                                for v in val:
+                                    sql = f'("e"."data" #> \'{{ {key} }}\' ? \'{v}\')'
+                                    elems = elems.filter(lambda e: raw_sql(sql))
+                        else:
+                            if self.provider == 'mysql':
+                                sql = f'(json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
+                                elems = elems.filter(lambda e: raw_sql(sql))
+                            else:
+                                if '.' in key:
+                                    key = key.replace('.', ',')
+                                    # raise StoreException('jsonpath not support for in operator')
+                                sql = f'("e"."data" #> \'{{ {key} }}\' ? \'{val}\')'
+                                elems = elems.filter(lambda e: raw_sql(sql))
                     else:
                         if self.provider == 'mysql':
                             if op == '==':
@@ -867,13 +899,19 @@ class Store(object):
         if mode == 'raw':
             if debug:
                 print('\n\n----sql----')
-                print(elems.get_sql())
+                sql,args, _, _ =elems._construct_sql_and_arguments()
+                print(sql)
+                print('......')
+                print(args)
                 print('-----------\n\n')
             return elems, -1
         elif mode == 'count':
             if debug:
                 print('\n\n----sql----')
-                print(elems.get_sql())
+                sql,args, _, _ =elems._construct_sql_and_arguments()
+                print(sql)
+                print('......')
+                print(args)
                 print('-----------\n\n')
             return [], elems.count()
         else:
@@ -889,7 +927,10 @@ class Store(object):
                     elems = elems.order_by(lambda o: (o.update, o.id))
             if debug:
                 print('\n\n----sql----')
-                print(elems.get_sql())
+                sql,args, _, _ =elems._construct_sql_and_arguments()
+                print(sql)
+                print('......')
+                print(args)
                 print('-----------\n\n')
             elems = self.adjust_slice(elems, for_update=for_update, begin=begin, end=end)
             for elem in elems:

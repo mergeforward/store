@@ -8,7 +8,7 @@ simple storage library
 """
 
 setup(
-    version='2020.01.03',
+    version='2020.01.04',
     name='store',
     url='https://github.com/mergeforward/store.git',
     license='MIT',

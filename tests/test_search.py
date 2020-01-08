@@ -27,10 +27,10 @@ def t():
                 'type': 'object',
             },
         }
-        # provider='postgres'
-        # port=5432 
-        provider='mysql'
-        port=3306 
+        provider='postgres'
+        port=5432 
+        # provider='mysql'
+        # port=3306 
         password='dangerous123'
         database='mytest'
         user='root'
@@ -47,6 +47,7 @@ def test_nomal_should_be_added(t):
         'archive': False,
         'l': ["a", "b", "c", "dameng"],
         'extra': {
+            'l': ["a", "b", "c", "dameng"],
             "a": "1",
             "b": "2",
             "c": {
@@ -64,7 +65,31 @@ def test_search(t):
     # es = t.search({"user": "meng", "likes": 456})
     # es = t.search({"likes": {"op": ">", "val": 100}}, debug=True)
     # es, total = t.search({"extra.c.n2": {"op": "=", "val": "12"}}, debug=True)
-    es, total = t.search({"l": {"op": "in", "val": ["da", "c1", 'a']}}, debug=True)
+    
+# SELECT `e`.`id`, `e`.`create`, `e`.`update`, `e`.`key`, `e`.`data`, `e`.`meta`
+# FROM `article` `e`
+# WHERE (
+# (json_contains(`e`.`data`, %s, %s) or json_contains_path(`e`.`data`, 'one', %s)) OR 
+# (json_contains(`e`.`data`, %s, %s) or json_contains_path(`e`.`data`, 'one', %s)) OR 
+# (json_contains(`e`.`data`, %s, %s) or json_contains_path(`e`.`data`, 'one', %s)))
+# ORDER BY `e`.`update` DESC, `e`.`id` DESC
+
+# ----sql----
+# SELECT "e"."id", "e"."create", "e"."update", "e"."key", "e"."data", "e"."meta"
+# FROM "article" "e"
+# WHERE (
+# ("e"."data" #> %(p1)s) ? %(p2)s OR 
+# ("e"."data" #> %(p1)s) ? %(p4)s OR 
+# ("e"."data" #> %(p1)s) ? %(p6)s)
+# ORDER BY "e"."update" DESC, "e"."id" DESC
+# -----------
+
+
+
+
+    # es, total = t.search({"d": {"op": "in", "val": ["da","aa"], "pa": "extra"}}, debug=True)
+    es, total = t.search({"extra.d": {"op": "ain", "val": ["ab", "aa"]}}, debug=True)
+    # es, total = t.search({"l": {"op": "in", "val": "me"}}, debug=True)
     # es, total = t.search({"user": ["a", "me", "meng"]}, debug=True)
     # es, total = t.search({"l":"da"}, debug=True)
     # es, total = t.search({"extra.c.n1": {"op": "=", "val": 12}}, debug=True, begin=0, end=1, mode='normal')
