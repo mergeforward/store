@@ -11,6 +11,19 @@ from store.parser import parse
 
 SCHEMA_CHECK = os.getenv('SCHEMA_CHECK', True)
 
+import collections
+
+def update_nest(orig_dict, new_dict):
+    for key, val in new_dict.items():
+        if isinstance(val, collections.Mapping):
+            tmp = update_nest(orig_dict.get(key, { }), val)
+            orig_dict[key] = tmp
+        elif isinstance(val, list):
+            orig_dict[key] = (orig_dict.get(key, []) + val)
+        else:
+            orig_dict[key] = new_dict[key]
+    return orig_dict
+
 try:
     from cerberus import Validator
 except Exception:
@@ -99,6 +112,10 @@ class StoreMetas:
             return super().__setattr__(key, data)
         for elem in self.elems:
             elem.__setattr__(key, data)
+    
+    # def __iter__(self):
+    #     for elem in self.elems:
+    #         yield elem
 
 STORE_META_SAFE_ATTR = ['store', 'store_obj', 'id', 'key', 'data', 'meta', 'create', 'update',
                    'update_meta', 'delete_meta',
@@ -702,13 +719,13 @@ class Store(object):
 
 
     @db_session
-    def update(self, condition, data=None, meta=None, patch=False, force=False):
+    def update(self, condition, data=None, meta=None, patch='jsonpath', force=False):
         elems, _ = self.search(condition, mode='raw')
         elems = elems.for_update()
         elems = elems[:]
         for elem in elems:
             if data:
-                if patch:
+                if patch == 'jsonpath':
                     copied = copy(elem.data)
                     for key,value in data.items():
                         set_json_value(copied, key, value)
@@ -717,20 +734,40 @@ class Store(object):
                         self.validate(copied, meta=elem.meta, extra=elem.key)
                     elem.data = copied
                     elem.update = datetime.utcnow()
+                elif patch == 'nest':
+                    copied = copy(elem.data)
+                    update_nest(copied, data)
+
+                    if not force:
+                        self.validate(copied, meta=elem.meta, extra=elem.key)
+                    elem.data = copied
+                    elem.update = datetime.utcnow()
                 else:
+                    if not force:
+                        self.validate(data, meta=elem.meta, extra=elem.key)
                     elem.data = data
                     elem.update = datetime.utcnow()
             if meta:
-                if patch:
+                if patch == 'jsonpath':
                     copied = copy(elem.meta)
                     for key,value in meta.items():
                         set_json_value(copied, key, value)
 
                     if not force:
-                        self.validate(elem.data, meta=meta, extra=elem.key)
+                        self.validate(elem.data, meta=copied, extra=elem.key)
+                    elem.meta = copied
+                    elem.update = datetime.utcnow()
+                elif patch == 'nest':
+                    copied = copy(elem.meta)
+                    update_nest(copied, meta)
+
+                    if not force:
+                        self.validate(elem.data, meta=copied, extra=elem.key)
                     elem.meta = copied
                     elem.update = datetime.utcnow()
                 else:
+                    if not force:
+                        self.validate(elem.data, meta=meta, extra=elem.key)
                     elem.meta = meta
                     elem.update = datetime.utcnow()
 
