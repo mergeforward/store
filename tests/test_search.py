@@ -27,10 +27,10 @@ def t():
                 'type': 'object',
             },
         }
-        provider='postgres'
-        port=5432 
-        # provider='mysql'
-        # port=3306 
+        # provider='postgres'
+        # port=5432 
+        provider='mysql'
+        port=3306 
         password='dangerous123'
         database='mytest'
         user='root'
@@ -45,7 +45,7 @@ def test_nomal_should_be_added(t):
         'content': 'hello world',
         'likes': 123,
         'archive': False,
-        'l': ["a", "b", "c", "dameng"],
+        'l': ["a", "b", "c", "da"],
         'extra': {
             'l': ["a", "b", "c", "dameng"],
             "a": "1",
@@ -55,7 +55,7 @@ def test_nomal_should_be_added(t):
                 "n1": 12,
                 "n2": "12"
             },
-            "d": ["aa", "bb", "ab"]
+            "d": ["aa", "bb", "ab", "dameng"]
         }
     }, update=True)
     # assert t[n][0].user == 'meng'
@@ -88,8 +88,9 @@ def test_search(t):
 
 
     # es, total = t.search({"d": {"op": "in", "val": ["da","aa"], "pa": "extra"}}, debug=True)
-    es, total = t.search({"extra.d": {"op": "ain", "val": ["ab", "aa"]}}, debug=True)
-    # es, total = t.search({"l": {"op": "in", "val": "me"}}, debug=True)
+    es, total = t.search({"extra.d": {"op": "ain", "val": ["ab", "aa", "dameng"]}}, debug=True)
+    # es, total = t.search({"l": {"op": "in", "val": "dameng"}}, debug=True)
+    # es, total = t.search({"l": {"op": "in", "val": "da"}}, debug=True)
     # es, total = t.search({"user": ["a", "me", "meng"]}, debug=True)
     # es, total = t.search({"l":"da"}, debug=True)
     # es, total = t.search({"extra.c.n1": {"op": "=", "val": 12}}, debug=True, begin=0, end=1, mode='normal')

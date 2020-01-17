@@ -827,7 +827,8 @@ class Store(object):
                             if self.provider == 'mysql':
                                 sqls = []
                                 for v in val:
-                                    sql = f'(json_contains(`e`.`data`, \'["{v}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{v}\'))'
+                                    # sql = f'(json_contains(`e`.`data`, \'["{v}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{v}\'))'
+                                    sql = f'json_contains(`e`.`data`, \'["{v}"]\', \'$$.{key}\')'
                                     sqls.append(sql)
                                 sql = ' OR '.join(sqls)
                                 elems = elems.filter(lambda e: raw_sql(sql))
@@ -844,7 +845,8 @@ class Store(object):
 
                         else:
                             if self.provider == 'mysql':
-                                sql = f'(json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
+                                # sql = f'(json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
+                                sql = f'json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\')'# or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
                                 elems = elems.filter(lambda e: raw_sql(sql))
                             else:
                                 if '.' in key:
@@ -852,7 +854,7 @@ class Store(object):
                                     # raise StoreException('jsonpath not support for in operator')
                                 sql = f'("e"."data" #> \'{{ {key} }}\' ? \'{val}\')'
                                 elems = elems.filter(lambda e: raw_sql(sql))
-                    if op == 'ain' or op == 'all_in':
+                    elif op == 'ain' or op == 'all_in':
                         if isinstance(val, list):
                             if self.provider == 'mysql':
                                 sql = f'json_contains(`e`.`data`, \'{json.dumps(val)}\', \'$$.{key}\')'
@@ -866,7 +868,8 @@ class Store(object):
                                     elems = elems.filter(lambda e: raw_sql(sql))
                         else:
                             if self.provider == 'mysql':
-                                sql = f'(json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
+                                # sql = f'(json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\') or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
+                                sql = f'json_contains(`e`.`data`, \'["{val}"]\', \'$$.{key}\')'# or json_contains_path(`e`.`data`, \'one\', \'$$.{key}.{val}\'))'
                                 elems = elems.filter(lambda e: raw_sql(sql))
                             else:
                                 if '.' in key:
