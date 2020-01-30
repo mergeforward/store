@@ -822,6 +822,8 @@ class Store(object):
 
                     op = value.get('operator') or value.get('op')  
                     val = value.get('value') or value.get('val') 
+                    if not op or not val:
+                        raise StoreException('operator and value not found')
                     if op == 'in' or op == 'any_in':
                         if isinstance(val, list):
                             if self.provider == 'mysql':

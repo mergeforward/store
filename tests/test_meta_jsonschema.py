@@ -46,7 +46,8 @@ def test_nomal_should_be_added(t):
         'title': '每日新闻 2019.08.06',
         'user': 'dameng',
         'content': 'hello world',
-        'likes': 123
+        'likes': 123,
+        'likes1': 123
     })
     assert t[n][0].user == 'dameng'
     assert t[n][0].content == 'hello world'
