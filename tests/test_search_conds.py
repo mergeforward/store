@@ -53,12 +53,11 @@ def test_nomal_should_be_added(t):
 
 def test_search(t):
     print('-'*40)
-    print(t)
     es,_ = t.search_multi([{
         'title': 'news01',
         'user': 'meng'
     },{
         'title': 'news02',
         'user': 'zhang'
-    }], fuzzy=False)
+    }], on='data', fuzzy=False)
     print(es)
