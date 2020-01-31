@@ -349,7 +349,7 @@ class Store(object):
                    'provider', 'user', 'password', 'host', 'port', 'database', 'filename',
                    'schema', 
                    'validate', 'model', 'meta',
-                   'search', 'delete','create','update'
+                   'search', 'delete','create','update', 'search_multi'
                    ]
 
     provider = 'sqlite'
@@ -853,7 +853,6 @@ class Store(object):
                             else:
                                 if '.' in key:
                                     key = key.replace('.', ',')
-                                    # raise StoreException('jsonpath not support for in operator')
                                 sql = f'("e"."data" #> \'{{ {key} }}\' ? \'{val}\')'
                                 elems = elems.filter(lambda e: raw_sql(sql))
                     elif op == 'ain' or op == 'all_in':
@@ -883,21 +882,33 @@ class Store(object):
                         if self.provider == 'mysql':
                             if op == '==':
                                 op = '='
-                            # elems = elems.filter(lambda e: e.data[key] == value)
-                            # sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
-                            if isinstance(val, str):
+                            if isinstance(val, bool):
+                                if val == True:
+                                    sql = f'json_extract(`e`.`data`, "$$.{key}") {op} true'
+                                else:
+                                    sql = f'json_extract(`e`.`data`, "$$.{key}") {op} false'
+                            elif isinstance(val, int) or isinstance(val, float):
+                                sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
+                            elif isinstance(val, str):
                                 sql = f'json_extract(`e`.`data`, "$$.{key}") {op} "{val}"'
                             else:
-                                sql = f'json_extract(`e`.`data`, "$$.{key}") {op} {val}'
-                            elems = elems.filter(lambda e: raw_sql(sql))
+                                detail = f'val {val} type {type(val)} invalid'
+                                raise StoreException(detail)
                         else:
                             if op == '=':
                                 op = '=='
-                            if isinstance(val, str):
+                            if isinstance(val, bool):
+                                if val == True:
+                                    sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == true)\')'
+                                else:
+                                    sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == false)\')'
+                            elif isinstance(val, int) or isinstance(val, float):
+                                sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} {val})\')'
+                            elif isinstance(val, str):
                                 sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} "{val}")\')'
                             else:
-                                sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ {op} {val})\')'
-                            elems = elems.filter(lambda e: raw_sql(sql))
+                                detail = f'val {val} type {type(val)} invalid'
+                                raise StoreException(detail)
                 elif isinstance(value, bool):
                     if self.provider == 'mysql':
                         if value == True:
@@ -905,7 +916,7 @@ class Store(object):
                         else:
                             sql = f'json_extract(`e`.`data`, "$$.{key}") = false'
                         elems = elems.filter(lambda e: raw_sql(sql))
-                    else:
+                    else: 
                         if value == True:
                             sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == true)\')'
                         else:
@@ -931,11 +942,8 @@ class Store(object):
                             sql = f'json_extract(`e`.`data`, "$$.{key}") = "{value}"'
                             elems = elems.filter(lambda e: raw_sql(sql))
                         else:
-                            # sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == "{value}")\')'
                             sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == "{value}")\')'
-                            # sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == false)\')'
-                            lems = elems.filter(lambda e: raw_sql(sql))
-                    # lambda_filters.append(raw_sql(sql))
+                            elems = elems.filter(lambda e: raw_sql(sql))
                 else:
                     raise StoreException('value type not support')
         if mode == 'raw':
@@ -978,3 +986,97 @@ class Store(object):
             for elem in elems:
                 self.validate(elem.data, meta=elem.meta, extra=elem.key )
             return StoreMetas(elems, store=self), total
+
+
+    @db_session
+    def search_multi(self, conditions, for_update=False, fuzzy=True, debug=False, mode='normal', order='desc', order_by=None, begin=None, end=None):
+        elems = select(e for e in self.store)
+        or_sqls = []
+        for condition in conditions:
+            and_sqls = []
+            for key, value in condition.items():
+                if isinstance(value, bool):
+                    if self.provider == 'mysql':
+                        if value == True:
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") = true'
+                        else:
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") = false'
+                        # elems = elems.filter(lambda e: raw_sql(sql))
+                    else:
+                        if value == True:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == true)\')'
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == false)\')'
+                        # elems = elems.filter(lambda e: raw_sql(sql))
+                elif isinstance(value, int) or isinstance(value, float):
+                    if self.provider == 'mysql':
+                        sql = f'json_extract(`e`.`data`, "$$.{key}") = {value}'
+                        # elems = elems.filter(lambda e: raw_sql(sql))
+                    else:
+                        sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == {value})\')'
+                        # elems = elems.filter(lambda e: raw_sql(sql))
+                elif isinstance(value, str):
+                    if fuzzy:
+                        if self.provider == 'mysql':
+                            sql = f'json_search(`e`.`data`, "all", "%%{value}%%", NULL, "$$.{key}")'
+                            # elems = elems.filter(lambda e: raw_sql(sql))
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ like_regex "{value}" flag "i")\')'
+                            # elems = elems.filter(lambda e: raw_sql(sql))
+                    else:
+                        if self.provider == 'mysql':
+                            sql = f'json_extract(`e`.`data`, "$$.{key}") = "{value}"'
+                            # elems = elems.filter(lambda e: raw_sql(sql))
+                        else:
+                            sql = f'jsonb_path_exists("e"."data", \'$$.{key} ? (@ == "{value}")\')'
+                            # elems = elems.filter(lambda e: raw_sql(sql))
+                else:
+                    raise StoreException('value type not support')
+                and_sqls.append(sql)
+            
+            and_sql = ' AND '.join(and_sqls)
+            or_sqls.append(and_sql)
+            
+        or_sql = ' OR '.join(or_sqls)
+        elems = elems.filter(lambda e: raw_sql(or_sql))
+        if mode == 'raw':
+            if debug:
+                print('\n\n----sql----')
+                sql,args, _, _ =elems._construct_sql_and_arguments()
+                print(sql)
+                print('......')
+                print(args)
+                print('-----------\n\n')
+            return elems, -1
+        elif mode == 'count':
+            if debug:
+                print('\n\n----sql----')
+                sql,args, _, _ =elems._construct_sql_and_arguments()
+                print(sql)
+                print('......')
+                print(args)
+                print('-----------\n\n')
+            return [], elems.count()
+        else:
+            total = elems.count() if count else -1
+            if order_by:
+                elems = elems.order_by(order_by)
+            else:
+                if not order:
+                    order = self.order
+                if order == 'desc':
+                    elems = elems.order_by(lambda o: (desc(o.update), desc(o.id)))
+                else:
+                    elems = elems.order_by(lambda o: (o.update, o.id))
+            if debug:
+                print('\n\n----sql----')
+                sql,args, _, _ =elems._construct_sql_and_arguments()
+                print(sql)
+                print('......')
+                print(args)
+                print('-----------\n\n')
+            elems = self.adjust_slice(elems, for_update=for_update, begin=begin, end=end)
+            for elem in elems:
+                self.validate(elem.data, meta=elem.meta, extra=elem.key )
+            return StoreMetas(elems, store=self), total
+
